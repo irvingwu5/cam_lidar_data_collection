@@ -1,0 +1,64 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"benewakeLidar/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 50,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"benewakeLidar/libbenewake_lidar_driver.so"
+			],
+			"targetId" : "benewake_lidar_driver::@9d3f77597679fd4145ea",
+			"targetIndex" : 1,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "include",
+			"paths" : 
+			[
+				"benewakeLidar/include/benewake_hornx2_driver.h",
+				"benewakeLidar/include/benewake_lidar_driver.h",
+				"benewakeLidar/include/benewake_common.h",
+				"benewakeLidar/include/benewake_dcsp.h",
+				"benewakeLidar/include/benewake_dsop.h",
+				"benewakeLidar/include/benewake_mdop.h",
+				"benewakeLidar/include/benewake_protocol.h",
+				"benewakeLidar/include/benewake_udp.h",
+				"benewakeLidar/include/msg_queue.h",
+				"benewakeLidar/include/benewake_tables.h"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "benewakeLidar",
+		"source" : "benewakeLidar"
+	}
+}

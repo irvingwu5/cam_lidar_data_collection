@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6"/>
+	<Project>
+		<Option title="benewake_lidar_driver"/>
+		<Option makefile_is_custom="1"/>
+		<Option compiler="gcc"/>
+		<Option virtualFolders="CMake Files\;CMake Files\benewakeLidar\;CMake Files\tanwaylidar\;"/>
+		<Build>
+			<Target title="all">
+				<Option working_dir="/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 all"/>
+					<CompileFile command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="benewake_lidar_driver">
+				<Option output="/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/libbenewake_lidar_driver.so" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar"/>
+				<Option object_output="./"/>
+				<Option type="3"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="/home/wxy/Documents/CppProjects/camera_lidar_driver/include"/>
+					<Add directory="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/include"/>
+					<Add directory="/usr/include/c++/12"/>
+					<Add directory="/usr/include/x86_64-linux-gnu/c++/12"/>
+					<Add directory="/usr/include/c++/12/backward"/>
+					<Add directory="/usr/lib/gcc/x86_64-linux-gnu/12/include"/>
+					<Add directory="/usr/local/include"/>
+					<Add directory="/usr/include/x86_64-linux-gnu"/>
+					<Add directory="/usr/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 benewake_lidar_driver"/>
+					<CompileFile command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+			<Target title="benewake_lidar_driver/fast">
+				<Option output="/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/libbenewake_lidar_driver.so" prefix_auto="0" extension_auto="0"/>
+				<Option working_dir="/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar"/>
+				<Option object_output="./"/>
+				<Option type="3"/>
+				<Option compiler="gcc"/>
+				<Compiler>
+					<Add directory="/home/wxy/Documents/CppProjects/camera_lidar_driver/include"/>
+					<Add directory="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/include"/>
+					<Add directory="/usr/include/c++/12"/>
+					<Add directory="/usr/include/x86_64-linux-gnu/c++/12"/>
+					<Add directory="/usr/include/c++/12/backward"/>
+					<Add directory="/usr/lib/gcc/x86_64-linux-gnu/12/include"/>
+					<Add directory="/usr/local/include"/>
+					<Add directory="/usr/include/x86_64-linux-gnu"/>
+					<Add directory="/usr/include"/>
+				</Compiler>
+				<MakeCommands>
+					<Build command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 benewake_lidar_driver/fast"/>
+					<CompileFile command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/make -j16 -f &quot;/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug/benewakeLidar/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+		</Build>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/src/benewake_dcsp.cpp">
+			<Option target="benewake_lidar_driver"/>
+		</Unit>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/src/benewake_dsop.cpp">
+			<Option target="benewake_lidar_driver"/>
+		</Unit>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/src/benewake_hornx2_driver.cpp">
+			<Option target="benewake_lidar_driver"/>
+		</Unit>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/src/benewake_lidar_driver.cpp">
+			<Option target="benewake_lidar_driver"/>
+		</Unit>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/src/benewake_mdop.cpp">
+			<Option target="benewake_lidar_driver"/>
+		</Unit>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/src/benewake_protocol.cpp">
+			<Option target="benewake_lidar_driver"/>
+		</Unit>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/src/benewake_udp.cpp">
+			<Option target="benewake_lidar_driver"/>
+		</Unit>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/CMakeLists.txt">
+			<Option virtualFolder="CMake Files\"/>
+		</Unit>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/benewakeLidar/CMakeLists.txt">
+			<Option virtualFolder="CMake Files\benewakeLidar\"/>
+		</Unit>
+		<Unit filename="/home/wxy/Documents/CppProjects/camera_lidar_driver/tanwaylidar/CMakeLists.txt">
+			<Option virtualFolder="CMake Files\tanwaylidar\"/>
+		</Unit>
+	</Project>
+</CodeBlocks_project_file>

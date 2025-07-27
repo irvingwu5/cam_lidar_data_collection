@@ -1,0 +1,140 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1,
+						2
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.8"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"build" : "benewakeLidar",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-benewakeLidar-Debug-991c8efad8eafe354b5f.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.8"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "benewakeLidar",
+					"targetIndexes" : 
+					[
+						1
+					]
+				},
+				{
+					"build" : "tanwaylidar",
+					"jsonFile" : "directory-tanwaylidar-Debug-3272c3600b96ad05556f.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.8"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 2,
+					"source" : "tanwaylidar",
+					"targetIndexes" : 
+					[
+						2
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1,
+						2
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "CollectionServer",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						1
+					],
+					"name" : "benewake_lidar_driver",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						1
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						2
+					],
+					"name" : "tanwaylidar",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "CollectionServer::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-CollectionServer-Debug-4ba70dc189d48177f2aa.json",
+					"name" : "CollectionServer",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "benewake_lidar_driver::@9d3f77597679fd4145ea",
+					"jsonFile" : "target-benewake_lidar_driver-Debug-4d2bafd6b326c261eca6.json",
+					"name" : "benewake_lidar_driver",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "tanwaylidar::@b66256eefe150e92e307",
+					"jsonFile" : "target-tanwaylidar-Debug-86207e677766a73d552f.json",
+					"name" : "tanwaylidar",
+					"projectIndex" : 2
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/wxy/Documents/CppProjects/camera_lidar_driver/cmake-build-debug",
+		"source" : "/home/wxy/Documents/CppProjects/camera_lidar_driver"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 6
+	}
+}

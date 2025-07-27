@@ -16,7 +16,7 @@
 #include "benewake_lidar_driver.h"
 #include <vector>
 #include <cmath> 
-
+#include <opencv2/opencv.hpp>
 // 定义单个雷达点的结构体（可根据需求扩展字段）
 struct RadarPoint {
     float x;        // X 坐标（米）
@@ -45,9 +45,11 @@ public:
     std::string getSavePath();
     std::string get_256_lidar_save_path();
     std::string get_64_lidar_save_path();
-
+    std::string get_central_cam_path(); //中间摄像头
+    std::string get_side_cam_path(); //侧方摄像头
     bool createDirectory(const std::string &namefile,bool is_has_root = true);
     bool deleteFile(const std::string &filename);
+    bool saveImage(const std::string& full_path, const cv::Mat& image);
     bool is_usb_inserted();
     std::string get_usb_session_folder();
     std::string get_parent_path(const std::string &path);

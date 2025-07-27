@@ -49,6 +49,18 @@ std::string FileManager::get_64_lidar_save_path()
     return full_path;
 }
 
+std::string FileManager::get_central_cam_path() {
+    std::string full_path = Config::select_path + Config::central_cam_path + "/Sequences";
+    std::cout << "central_cam_save_path: " << full_path << std::endl;
+    return full_path;
+}
+
+std::string FileManager::get_side_cam_path() {
+    std::string full_path = Config::select_path + Config::side_cam_path + "/Sequences";
+    std::cout << "side_cam_save_path: " << full_path << std::endl;
+    return full_path;
+}
+
 bool FileManager::createDirectory(const std::string &namefile,bool is_has_root)
 {
     std::string dir = root_path + namefile;
@@ -65,6 +77,10 @@ bool FileManager::deleteFile(const std::string &filename)
     std::string cmd = "rm -r -f " + path;
     std::cout << "deleteFile: " << path << std::endl;
     return system(cmd.c_str()) == 0;
+}
+
+bool FileManager::saveImage(const std::string &full_path, const cv::Mat &image) {
+    return cv::imwrite(full_path, image);
 }
 
 bool FileManager::is_usb_inserted()

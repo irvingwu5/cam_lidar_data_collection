@@ -14,6 +14,8 @@
 #include <unordered_map>
 #include "BenewakeLidarManager.h"
 #include "TanwayLidarManager.h"
+#include "CentralCamManager.h"
+#include "SideCamManager.h"
 class BenewakeLidarManager;
 class TanwayLidarManager;
 class FileManager;
@@ -30,12 +32,17 @@ private:
     int server_fd, client_fd;
     int port;
     struct sockaddr_in server_addr, client_addr;
-    void handle_client(int client_socket,  FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager);
+    void handle_client(int client_socket,  FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
+        CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager);
     std::string dealBeneWakeLidar(BenewakeLidarManager &benewakeLidarManager,std::string save_path, bool isStart);
     std::string dealTanwayLidar(TanwayLidarManager &tanwayLidarManager,std::string save_path, bool isStart);
-    std::string get_init_info( FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager);
+    std::string dealCentralCam(CentralCamManager &central_cam_manager, std::string save_path, bool isStart); //中间摄像头
+    std::string dealSideCam(SideCamManager &side_cam_manager, std::string save_path, bool isStart); //侧方摄像头
+    std::string get_init_info( FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
+        CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager);
     std::string process_command(const std::string &command,
-                                FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager);
+                                FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
+                                CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager);
 };
 
 #endif

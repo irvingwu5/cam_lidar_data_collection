@@ -34,13 +34,16 @@ SocketServer::~SocketServer()
 {
     close(server_fd);
 }
-std::string SocketServer::get_init_info( FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager)
+std::string SocketServer::get_init_info( FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
+    CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager)
 {
     std::string link_status = "OK";
     std::string is_has_UP = (fileManager.is_usb_inserted() ? "True" : "False");
     std::string up_path = (fileManager.is_usb_inserted() ? fileManager.get_usb_session_folder() : "");
     bool has_lidar_64 = tanwayLidarManager.hasLidar();
     bool has_lidar_248 = benewakeLidarManager.hasLidar();
+    bool has_central_cam = central_cam_manager.isRunning();
+    bool has_side_cam = side_cam_manager.isRunning();
     std::string root_path = fileManager.getRootPath();
     std::vector<std::string> current_files = fileManager.getFileChildPaths();
 
@@ -60,6 +63,8 @@ std::string SocketServer::get_init_info( FileManager &fileManager,BenewakeLidarM
                             ",UP_path:" + up_path +
                             ",64_line_ladar:" + (has_lidar_64 ? "True" : "False") +
                             ",248_line_ladar:" + (has_lidar_248 ? "True" : "False") +
+                            ",central_cam:" + (has_central_cam ? "True" : "False") +
+                            ",side_cam:" + (has_side_cam ? "True" : "False") +
                             ",root_path:" + root_path +
                             ",current_file:" + current_file_str +
                             "}";
@@ -82,13 +87,19 @@ void SocketServer::start()
     benewakeLidarManager.initialize();
     TanwayLidarManager tanwayLidarManager = TanwayLidarManager(client_fd,fileManager);
     tanwayLidarManager.initialize();
-    std::string init_info = get_init_info(fileManager, benewakeLidarManager,tanwayLidarManager);
+    // BaseCameraManager base_camera_manager = BaseCameraManager(fileManager);
+    CentralCamManager central_cam_manager("/dev/video0", 1920, 1080, fileManager);
+    central_cam_manager.init();
+    SideCamManager side_cam_manager('/dev/video1','fileManager);
+    side_cam_manager.init();
+    std::string init_info = get_init_info(fileManager, benewakeLidarManager,tanwayLidarManager, central_cam_manager, side_cam_manager);
     send(client_fd, init_info.c_str(), init_info.size(), 0);
-    handle_client(client_fd, fileManager, benewakeLidarManager,tanwayLidarManager);
+    handle_client(client_fd, fileManager, benewakeLidarManager,tanwayLidarManager, central_cam_manager, side_cam_manager);
     close(client_fd);
 }
 
-void SocketServer::handle_client(int client_socket, FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager)
+void SocketServer::handle_client(int client_socket, FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
+    CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager)
 {
     char buffer[1024];
     while (true)
@@ -102,7 +113,7 @@ void SocketServer::handle_client(int client_socket, FileManager &fileManager,Ben
         }
 
         std::string received(buffer);
-        std::string response = process_command(received, fileManager, benewakeLidarManager,tanwayLidarManager);
+        std::string response = process_command(received, fileManager, benewakeLidarManager,tanwayLidarManager, central_cam_manager, side_cam_manager);
         send(client_socket, response.c_str(), response.size(), 0);
     }
 }
@@ -173,8 +184,57 @@ std::string SocketServer::dealBeneWakeLidar(BenewakeLidarManager &benewakeLidarM
                               "}";
     return return_info;
 }
+
+std::string SocketServer::dealCentralCam(CentralCamManager &central_camera_manager, std::string save_path, bool isStart) {
+    std::string status = "1", error = "",info="";
+    if (central_camera_manager.isRunning()) {
+        if (isStart) {
+            std::thread task_thread([&central_camera_manager](){central_camera_manager.startCapture();});
+            task_thread.detach();//后台运行
+            info = "The central camera starts to collect data";
+        }else {
+            info = "The central camera has stopped collecting data";
+            central_camera_manager.stopCapture();
+        }
+    }else {
+        status = "0";
+        error = "central cam doesn't exit";
+    }
+    std::string return_info = "{status: " + status +
+                              ", path: " + save_path +
+                              ", log: " + info +
+                              ", error: " + error +
+                              "}";
+    return return_info;
+}
+
+std::string SocketServer::dealSideCam(SideCamManager &side_cam_manager, std::string save_path, bool isStart) {
+    std::string status = "1", error = "",info="";
+    if (side_cam_manager.isRunning()) {
+        if (isStart) {
+            std::thread task_thread([&side_cam_manager](){side_cam_manager.startCapture();});
+            task_thread.detach();//后台运行
+            info = "The side camera starts to collect data";
+        }else {
+            info = "The side camera has stopped collecting data";
+            side_cam_manager.stopCapture();
+        }
+    }else {
+        status = "0";
+        error = "side cam doesn't exit";
+    }
+    std::string return_info = "{status: " + status +
+                              ", path: " + save_path +
+                              ", log: " + info +
+                              ", error: " + error +
+                              "}";
+    return return_info;
+}
+
+
 std::string SocketServer::process_command(const std::string &command,
-                                         FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager)
+                                         FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
+                                         CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager)
 {
     // 拆分命令名与参数
     auto pos = command.find(':');
@@ -211,6 +271,23 @@ std::string SocketServer::process_command(const std::string &command,
         dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), false);
         return "Goodbye Client!\n";
     }
+    else if (cmd == "central_cam_start")
+    {
+        dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),true);
+        return "The central camera starts to collect data";
+    }
+    else if (cmd == "central_cam_end") {
+        dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
+        return "The central camera has stopped collecting data";
+    }
+    else if (cmd == "slide_cam_start") {
+        dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),true);
+        return "The side camera starts to collect data";
+    }
+    else if (cmd == "slide_cam_end") {
+        dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
+        return "The side camera has stopped collecting data";
+    }
     // 创建保存目录
     else if (cmd == "create_path")
     {
@@ -230,7 +307,7 @@ std::string SocketServer::process_command(const std::string &command,
     else if (cmd == "det_path")
     {
         fileManager.deleteFile(arg);
-        std::string init_info = get_init_info(fileManager, benewakeLidarManager,tanwayLidarManager);
+        std::string init_info = get_init_info(fileManager, benewakeLidarManager,tanwayLidarManager, central_cam_manager, side_cam_manager);
         return init_info;
     }
     // 导出数据到u盘

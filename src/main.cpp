@@ -31,30 +31,32 @@ int main(int argc, char **argv)
 
 	// 客户端交互
 
-	// SocketClient client("127.0.0.1", 8081);
-	// if (client.connect_to_server())
-	// {
-	// 	client.send_message("create_path:m6");
-	// 	client.receive_response();
+	//SocketClient client("127.0.0.1", 8080);
+	//if (client.connect_to_server())
+	//{
+		//client.send_message("central_cam_start");
+		//client.receive_response();
+		// client.send_message("create_path:m6");
+		// client.receive_response();
+  //
+		// client.send_message("select_path:m6");
+		// client.receive_response();
+  //
+		//
+		// client.send_message("together_start");
+		// client.receive_response();
+  //
+		// std::this_thread::sleep_for(std::chrono::seconds(16));
+		// client.send_message("together_end");
+		// client.receive_response();
+  //
+  //       client.send_message("export_data_to_usb");
+		// client.receive_response();
+		// client.send_message("det_path:ram");
+		// client.receive_response();
 
-	// 	client.send_message("select_path:m6");
-	// 	client.receive_response();
-
-		
-	// 	client.send_message("together_start");
-	// 	client.receive_response();
-
-	// 	std::this_thread::sleep_for(std::chrono::seconds(16));
-	// 	client.send_message("together_end");
-	// 	client.receive_response();
-
-    //     client.send_message("export_data_to_usb");
-	// 	client.receive_response();
-	// 	// client.send_message("det_path:ram");
-	// 	// client.receive_response();
-
-	// 	client.close_connection();
-	// }
+		//client.close_connection();
+	//}
 
 	server_thread.join();
 	return 0;

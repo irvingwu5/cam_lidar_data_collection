@@ -51,13 +51,13 @@ std::string FileManager::get_64_lidar_save_path()
 
 std::string FileManager::get_central_cam_path() {
     std::string full_path = Config::select_path + Config::central_cam_path + "/Sequences";
-    std::cout << "central_cam_save_path: " << full_path << std::endl;
+    std::cout << "\ncentral_cam_save_path: " << full_path << std::endl;
     return full_path;
 }
 
 std::string FileManager::get_side_cam_path() {
     std::string full_path = Config::select_path + Config::side_cam_path + "/Sequences";
-    std::cout << "side_cam_save_path: " << full_path << std::endl;
+    std::cout << "\nside_cam_save_path: " << full_path << std::endl;
     return full_path;
 }
 

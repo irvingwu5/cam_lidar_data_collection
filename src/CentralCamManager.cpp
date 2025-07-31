@@ -6,6 +6,7 @@ CentralCamManager::CentralCamManager(const std::string& device_path, int width, 
     width_(width),
     height_(height),
     file_manager_(file_manager),
+    hasCentralCam(false),
     is_running_(false){}
 
 CentralCamManager::~CentralCamManager() {
@@ -16,8 +17,10 @@ bool CentralCamManager::init() {
     //尝试打开摄像头
     if (!capture_.open(device_path_)) {
         std::cerr << "The central camera does not exist" << std::endl;
-        return false;
+        hasCentralCam = false;
+        return false; // 摄像头打开失败
     }
+    hasCentralCam = true;
     //设置摄像头编码格式
     capture_.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M','J','P','G'));
     //设置摄像头分辨率
@@ -31,18 +34,11 @@ bool CentralCamManager::init() {
         capture_.set(CAP_PROP_FRAME_HEIGHT, 720);
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(500));//增加短暂延迟，等待摄像头初始化完成
-    //为后续图像保存创建目录
-    std::string img_path = file_manager_.get_central_cam_path();
-    if (!file_manager_.createDirectory(img_path, false)) {
-        std::cerr << "Failed to create directory: " << img_path << std::endl;
-        return false;
-    }
     return true;
 }
 //主要做设备检测、线程池创建、设备启动等工作，实际采集工作在captureLoop中进行
 bool CentralCamManager::startCapture() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (is_running_) return false; // 已在运行
     if (!capture_.isOpened() && !init()) return false;
     is_running_ = true;
     capture_thread_ = std::thread(&CentralCamManager::captureLoop, this);
@@ -62,6 +58,10 @@ bool CentralCamManager::isRunning() const {
     return is_running_.load();
 }
 
+bool CentralCamManager::hasCentralCamera() const {
+    return hasCentralCam;
+}
+
 std::string CentralCamManager::generateTimestampFilename() {
     // 生成格式：YYYYMMDD_HHMMSS.png
     auto now = std::chrono::system_clock::now();
@@ -76,14 +76,24 @@ std::string CentralCamManager::generateTimestampFilename() {
 //摄像头循环采集图像并保存
 void CentralCamManager::captureLoop() {
     try {
-        while (is_running_) {
+        // 在循环开始前，确定本次采集的唯一保存目录
+        std::string img_path = file_manager_.get_central_cam_path();
+        int number = file_manager_.getPathCount(img_path);
+        if (number < 10) {
+            img_path = img_path + "/0" + std::to_string(number);
+        } else {
+            img_path = img_path + "/" + std::to_string(number);
+        }
+        // 创建这个唯一的目录
+        file_manager_.createDirectory(img_path, false);
+
+        while (CentralCamManager::isRunning()) {
             Mat frame;
             std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
             if (!capture_.read(frame)) {
                 std::cerr << "Failed to capture frame from camera." << std::endl;
                 continue; // 如果读取失败，继续下一次循环
             }
-            std::string img_path = file_manager_.get_central_cam_path();
             // 生成带时间戳的文件名
             std::string filename = generateTimestampFilename();
             std::string full_path = img_path + "/";

@@ -42,8 +42,8 @@ std::string SocketServer::get_init_info( FileManager &fileManager,BenewakeLidarM
     std::string up_path = (fileManager.is_usb_inserted() ? fileManager.get_usb_session_folder() : "");
     bool has_lidar_64 = tanwayLidarManager.hasLidar();
     bool has_lidar_248 = benewakeLidarManager.hasLidar();
-    bool has_central_cam = central_cam_manager.isRunning();
-    bool has_side_cam = side_cam_manager.isRunning();
+    bool has_central_cam = central_cam_manager.hasCentralCamera();
+    bool has_side_cam = side_cam_manager.hasSideCamera();
     std::string root_path = fileManager.getRootPath();
     std::vector<std::string> current_files = fileManager.getFileChildPaths();
 
@@ -81,7 +81,7 @@ void SocketServer::start()
         return;
     }
 
-    std::cout << "Client connected!" << std::endl;
+    std::cout << "\nClient connected!\n" << std::endl;
     FileManager fileManager = FileManager();
     BenewakeLidarManager benewakeLidarManager = BenewakeLidarManager(client_fd,fileManager);
     benewakeLidarManager.initialize();
@@ -90,7 +90,7 @@ void SocketServer::start()
     // BaseCameraManager base_camera_manager = BaseCameraManager(fileManager);
     CentralCamManager central_cam_manager("/dev/video0", 1920, 1080, fileManager);
     central_cam_manager.init();
-    SideCamManager side_cam_manager('/dev/video1','fileManager);
+    SideCamManager side_cam_manager("/dev/video2",1920,1080,fileManager);
     side_cam_manager.init();
     std::string init_info = get_init_info(fileManager, benewakeLidarManager,tanwayLidarManager, central_cam_manager, side_cam_manager);
     send(client_fd, init_info.c_str(), init_info.size(), 0);
@@ -108,7 +108,7 @@ void SocketServer::handle_client(int client_socket, FileManager &fileManager,Ben
         ssize_t n = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
         if (n <= 0)
         {
-            std::cout << "Client disconnected." << std::endl;
+            std::cout << "\nClient disconnected.\n" << std::endl;
             break;
         }
 
@@ -187,13 +187,13 @@ std::string SocketServer::dealBeneWakeLidar(BenewakeLidarManager &benewakeLidarM
 
 std::string SocketServer::dealCentralCam(CentralCamManager &central_camera_manager, std::string save_path, bool isStart) {
     std::string status = "1", error = "",info="";
-    if (central_camera_manager.isRunning()) {
+    if (central_camera_manager.hasCentralCamera()) {
         if (isStart) {
             std::thread task_thread([&central_camera_manager](){central_camera_manager.startCapture();});
             task_thread.detach();//后台运行
-            info = "The central camera starts to collect data";
+            info = "\nThe central camera starts to collect data\n";
         }else {
-            info = "The central camera has stopped collecting data";
+            info = "\nThe central camera has stopped collecting data\n";
             central_camera_manager.stopCapture();
         }
     }else {
@@ -210,13 +210,13 @@ std::string SocketServer::dealCentralCam(CentralCamManager &central_camera_manag
 
 std::string SocketServer::dealSideCam(SideCamManager &side_cam_manager, std::string save_path, bool isStart) {
     std::string status = "1", error = "",info="";
-    if (side_cam_manager.isRunning()) {
+    if (side_cam_manager.hasSideCamera()) {
         if (isStart) {
             std::thread task_thread([&side_cam_manager](){side_cam_manager.startCapture();});
             task_thread.detach();//后台运行
-            info = "The side camera starts to collect data";
+            info = "\nThe side camera starts to collect data\n";
         }else {
-            info = "The side camera has stopped collecting data";
+            info = "\nThe side camera has stopped collecting data\n";
             side_cam_manager.stopCapture();
         }
     }else {
@@ -273,18 +273,16 @@ std::string SocketServer::process_command(const std::string &command,
     }
     else if (cmd == "central_cam_start")
     {
-        dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),true);
-        return "The central camera starts to collect data";
+        return dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),true);
     }
     else if (cmd == "central_cam_end") {
-        dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
-        return "The central camera has stopped collecting data";
+        return dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
     }
-    else if (cmd == "slide_cam_start") {
+    else if (cmd == "side_cam_start") {
         dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),true);
         return "The side camera starts to collect data";
     }
-    else if (cmd == "slide_cam_end") {
+    else if (cmd == "side_cam_end") {
         dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
         return "The side camera has stopped collecting data";
     }

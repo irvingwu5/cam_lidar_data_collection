@@ -46,7 +46,7 @@ bool TanwayLidarManager::initialize()
 
 void TanwayLidarManager::start()
 {
-    if (lidar_ready)
+    if (lidar_ready && !is_running_)
     {
         cur_frame = 0;
         save_dir = fileManager.get_64_lidar_save_path();
@@ -63,14 +63,27 @@ void TanwayLidarManager::start()
             save_dir = save_dir + "/" + std::to_string(number);
         fileManager.createDirectory(save_dir,false);
         lidar->Start();
+        // 设置运行状态并启动线程
+        is_running_ = true;
+        capture_thread_ = std::thread([this]() {
+            // 线程主循环：保持运行直到is_running_为false
+            while (is_running_) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        });
         std::cout << "[TanwayLidarManager] Lidar started." << std::endl;
     }
 }
 
 void TanwayLidarManager::stop()
 {
-    if (lidar_ready)
+    if (lidar_ready && is_running_)
     {
+        is_running_ = false; // 先停止运行状态
+        // 等待线程结束
+        if (capture_thread_.joinable()) {
+            capture_thread_.join();
+        }
         lidar->Stop();
         std::cout << "[TanwayLidarManager] Lidar stopped." << std::endl;
     }
@@ -83,6 +96,9 @@ bool TanwayLidarManager::hasLidar() const
 
 void TanwayLidarManager::OnPointCloud(const LidarInfo &info, const UserPointCloud &tanway_cloud)
 {
+    // 只处理运行状态下的数据
+    if (!is_running_) return;
+
     auto task = [tanway_cloud, this]() {
 
         static auto last_time = std::chrono::steady_clock::now();  // 上次统计时间（静态变量保持状态）

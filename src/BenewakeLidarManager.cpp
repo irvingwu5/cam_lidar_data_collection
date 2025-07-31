@@ -61,15 +61,28 @@ void BenewakeLidarManager::start()
         return;
     }
 
-    main_loop();
-    lidar->stop();
+    // 启动采集线程（不再detach，保存线程句柄）
+    is_running_ = true;
+    main_thread_ = std::thread(&BenewakeLidarManager::main_loop, this);
 }
 
 void BenewakeLidarManager::stop()
 {
-    Config::running = false;
+    if (!lidar_present) return;
+
+    // 原子更新状态，终止循环
+    is_running_ = false;
+    // 停止设备
     if (lidar)
         lidar->stop();
+    // 等待采集线程结束（关键：确保线程同步）
+    if (main_thread_.joinable())
+    {
+        main_thread_.join();
+        std::cout << "[BenewakeLidarManager] Lidar thread stopped.\n";
+    }
+    // 释放线程池
+    pool.reset();
 }
 void BenewakeLidarManager::main_loop()
 {
@@ -95,7 +108,7 @@ void BenewakeLidarManager::main_loop()
     int frame_counter = 0;
     auto last_time = std::chrono::steady_clock::now();
 
-    while (Config::running)
+    while (is_running_)
     {
         bool ok = lidar->getData(pointCloud, nFrame, sys_info);
         if (!ok)

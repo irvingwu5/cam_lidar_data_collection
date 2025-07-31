@@ -83,9 +83,9 @@ void SocketServer::start()
 
     std::cout << "\nClient connected!\n" << std::endl;
     FileManager fileManager = FileManager();
-    BenewakeLidarManager benewakeLidarManager = BenewakeLidarManager(client_fd,fileManager);
+    BenewakeLidarManager benewakeLidarManager(client_fd, fileManager);
     benewakeLidarManager.initialize();
-    TanwayLidarManager tanwayLidarManager = TanwayLidarManager(client_fd,fileManager);
+    TanwayLidarManager tanwayLidarManager(client_fd, fileManager);
     tanwayLidarManager.initialize();
 
     // BaseCameraManager base_camera_manager = BaseCameraManager(fileManager);

@@ -8,7 +8,7 @@
 #include <mutex>
 #include <vector>
 #include <condition_variable>
-
+#include <atomic>
 #include "benewake_lidar_driver.h"
 #include "SocketServer.h"
 #include "SocketClient.h"
@@ -36,6 +36,9 @@ private:
     FileManager fileManager;
     bool lidar_present = false;
     bool save_enabled = false;
+
+    std::atomic<bool> is_running_{false};// 替代Config::running
+    std::thread main_thread_;// 保存主线程句柄
 
     void main_loop();
 };

@@ -6,6 +6,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <atomic>  // 新增：原子变量头文件
 
 #include "ILidarDevice.h"
 #include "ILidarAlgo.h"
@@ -51,4 +52,7 @@ private:
     FileManager fileManager;
 
     bool lidar_ready = false;
+    // 新增：线程控制变量
+    std::atomic<bool> is_running_{false};  // 控制采集状态
+    std::thread capture_thread_;           // 采集线程句柄
 };

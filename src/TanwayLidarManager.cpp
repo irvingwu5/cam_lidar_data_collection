@@ -58,9 +58,9 @@ void TanwayLidarManager::start()
 
         int number = fileManager.getPathCount(save_dir);
         if (number < 10)
-            save_dir = save_dir + "/0" + std::to_string(number) + "/velodyne";
+            save_dir = save_dir + "/0" + std::to_string(number);
         else
-            save_dir = save_dir + "/" + std::to_string(number) + "/velodyne";
+            save_dir = save_dir + "/" + std::to_string(number);
         fileManager.createDirectory(save_dir,false);
         lidar->Start();
         std::cout << "[TanwayLidarManager] Lidar started." << std::endl;

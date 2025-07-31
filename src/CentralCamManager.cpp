@@ -33,7 +33,7 @@ bool CentralCamManager::init() {
         capture_.set(CAP_PROP_FRAME_WIDTH, 1280);
         capture_.set(CAP_PROP_FRAME_HEIGHT, 720);
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));//增加短暂延迟，等待摄像头初始化完成
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));//增加短暂延迟，等待摄像头初始化完成
     return true;
 }
 //主要做设备检测、线程池创建、设备启动等工作，实际采集工作在captureLoop中进行

@@ -87,6 +87,7 @@ void SocketServer::start()
     benewakeLidarManager.initialize();
     TanwayLidarManager tanwayLidarManager = TanwayLidarManager(client_fd,fileManager);
     tanwayLidarManager.initialize();
+
     // BaseCameraManager base_camera_manager = BaseCameraManager(fileManager);
     CentralCamManager central_cam_manager("/dev/video0", 1920, 1080, fileManager);
     central_cam_manager.init();
@@ -255,17 +256,16 @@ std::string SocketServer::process_command(const std::string &command,
     }
     else if (cmd == "256_line_ladar_end")
     {
-
         return dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), false);
     }
     // 同时采集
-    else if (cmd == "together_start")
+    else if (cmd == "all_lidar_start")
     {
         dealTanwayLidar(tanwayLidarManager,fileManager.get_64_lidar_save_path(), true);
         dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), true);
         return "Hello Client!\n";
     }
-    else if (cmd == "together_end")
+    else if (cmd == "all_lidar_end")
     {
         dealTanwayLidar(tanwayLidarManager,fileManager.get_64_lidar_save_path(), false);
         dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), false);
@@ -279,12 +279,20 @@ std::string SocketServer::process_command(const std::string &command,
         return dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
     }
     else if (cmd == "side_cam_start") {
-        dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),true);
-        return "The side camera starts to collect data";
+        return dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),true);
     }
     else if (cmd == "side_cam_end") {
+        return dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
+    }
+    else if (cmd == "all_cam_start"){
+        dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),true);
+        dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),true);
+        return "Two camera start to take data!";
+    }
+    else if (cmd == "all_cam_end"){
+        dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
         dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
-        return "The side camera has stopped collecting data";
+        return "Two camera stop to take data!";
     }
     // 创建保存目录
     else if (cmd == "create_path")

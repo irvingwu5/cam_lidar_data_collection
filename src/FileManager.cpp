@@ -37,26 +37,26 @@ std::string FileManager::getSavePath()
 
 std::string FileManager::get_256_lidar_save_path()
 {
-    std::string full_path = Config::select_path + Config::lidar_256_path + "/Sequences";
-    std::cout << "256_lidar_save_path: " << full_path << std::endl;
+    std::string full_path = Config::select_path + "Sequences/" + Config::lidar_256_path;
+    std::cout << "\n256_lidar_save_path: " << full_path << std::endl;
     return full_path;
 }
 
 std::string FileManager::get_64_lidar_save_path()
 {
-    std::string full_path = Config::select_path + Config::lidar_64_path + "/Sequences";
-    std::cout << "64_lidar_save_path: " << full_path << std::endl;
+    std::string full_path = Config::select_path + "Sequences/" + Config::lidar_64_path;
+    std::cout << "\n64_lidar_save_path: " << full_path << std::endl;
     return full_path;
 }
 
 std::string FileManager::get_central_cam_path() {
-    std::string full_path = Config::select_path + Config::central_cam_path + "/Sequences";
+    std::string full_path = Config::select_path+ "Sequences/" + Config::central_cam_path;
     std::cout << "\ncentral_cam_save_path: " << full_path << std::endl;
     return full_path;
 }
 
 std::string FileManager::get_side_cam_path() {
-    std::string full_path = Config::select_path + Config::side_cam_path + "/Sequences";
+    std::string full_path = Config::select_path + "Sequences/" + Config::side_cam_path;
     std::cout << "\nside_cam_save_path: " << full_path << std::endl;
     return full_path;
 }

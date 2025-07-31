@@ -87,9 +87,9 @@ void BenewakeLidarManager::main_loop()
 
     int number = fileManager.getPathCount(dir);
     if (number < 10)
-        dir = dir + "/0" + std::to_string(number) + "/velodyne";
+        dir = dir + "/0" + std::to_string(number);
     else
-        dir = dir + "/" + std::to_string(number) + "/velodyne";
+        dir = dir + "/" + std::to_string(number);
     fileManager.createDirectory(dir,false);
     // 帧率统计变量
     int frame_counter = 0;

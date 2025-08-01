@@ -62,6 +62,10 @@ void TanwayLidarManager::start()
         else
             save_dir = save_dir + "/" + std::to_string(number);
         fileManager.createDirectory(save_dir,false);
+
+        std::ofstream timestamp_file(save_dir + "/timestamp.txt");
+        timestamp_file.close();
+
         lidar->Start();
         // 设置运行状态并启动线程
         is_running_ = true;
@@ -92,6 +96,19 @@ void TanwayLidarManager::stop()
 bool TanwayLidarManager::hasLidar() const
 {
     return lidar_ready;
+}
+
+std::string TanwayLidarManager::generateTimestampFilename()
+{
+    // 生成格式：YYYYMMDD_HHMMSS_uuuuuu
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()) % 1000000;
+
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S")
+       << "_" << std::setw(6) << std::setfill('0') << microseconds.count();
+    return ss.str();
 }
 
 void TanwayLidarManager::OnPointCloud(const LidarInfo &info, const UserPointCloud &tanway_cloud)
@@ -127,12 +144,21 @@ void TanwayLidarManager::OnPointCloud(const LidarInfo &info, const UserPointClou
             last_time = current_time;
         }
 
-
         std::ostringstream filename;
         auto now = std::chrono::system_clock::now();
         auto time = std::chrono::system_clock::to_time_t(now);
-        
-        filename << save_dir <<"/frame_" << std::setw(6) << std::setfill('0') << cur_frame << ".bin";
+
+        //创建时间戳空文件
+        std::string timestamp = generateTimestampFilename();
+        std::string timestamp_path = save_dir + "/timestamp.txt";
+        //向文件中写入时间戳
+        if(!fileManager.saveTimestampTxt(timestamp_path, timestamp)){
+            std::cerr << "[TanwayLidarManager] Failed to save timestamp." << std::endl;
+        }else{
+            std::cout << "[TanwayLidarManager] Saved timestamp: " << timestamp_path << std::endl;
+        }
+
+        filename << save_dir << "/" << timestamp << ".bin";
 
         std::vector<RadarPoint> cloud;
         cloud.reserve(tanway_cloud.points.size());

@@ -39,6 +39,7 @@ private:
 
     std::atomic<bool> is_running_{false};// 替代Config::running
     std::thread main_thread_;// 保存主线程句柄
+    std::string generateTimestampFilename();// 生成带时间戳的文件名
 
     void main_loop();
 };

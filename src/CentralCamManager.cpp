@@ -14,26 +14,32 @@ CentralCamManager::~CentralCamManager() {
 }
 
 bool CentralCamManager::init() {
+    std::cout << "Trying to open central camera: " << device_path_ << std::endl;
+    //设置摄像头编码格式
+    capture_.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M','J','P','G'));
+    //设置摄像头分辨率
+    capture_.set(CAP_PROP_FRAME_WIDTH, width_);
+    capture_.set(CAP_PROP_FRAME_HEIGHT, height_);
+    // 3. 设置帧率（30fps，设备支持且稳定）
+    capture_.set(CAP_PROP_FPS, 30);
+    // 4. 禁用自动RGB转换（MJPG是压缩格式，无需提前转换）
+    capture_.set(CAP_PROP_CONVERT_RGB, false);
     //尝试打开摄像头
-    if (!capture_.open(device_path_)) {
+    if (!capture_.open(device_path_,cv::CAP_V4L2)) {
         std::cerr << "The central camera does not exist" << std::endl;
         hasCentralCam = false;
         return false; // 摄像头打开失败
     }
     hasCentralCam = true;
-    //设置摄像头编码格式
-    capture_.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M','J','P','G'));
-    //设置摄像头分辨率
-    bool setWidth = capture_.set(CAP_PROP_FRAME_WIDTH, width_);
-    bool setHeight = capture_.set(CAP_PROP_FRAME_HEIGHT, height_);
-    //检查分辨率是否设置正确
-    if (!setWidth || !setHeight) {
-        std::cerr<<"Warning: The camera does not support" << width_ << "*" << height_ <<
-            "resolution and will use the default resolution 1280*720" << std::endl;
-        capture_.set(CAP_PROP_FRAME_WIDTH, 1280);
-        capture_.set(CAP_PROP_FRAME_HEIGHT, 720);
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));//增加短暂延迟，等待摄像头初始化完成
+    // 延长延迟至300ms，等待UVC摄像头硬件初始化（尤其高分辨率模式）
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // 验证实际参数（可选，确保设置生效）
+    int actual_fps = capture_.get(CAP_PROP_FPS);
+    int actual_fourcc = capture_.get(CAP_PROP_FOURCC);
+    std::cout << "Actual FPS: " << actual_fps << ", Actual Format: "
+              << (char)(actual_fourcc&0xFF) << (char)((actual_fourcc>>8)&0xFF)
+              << (char)((actual_fourcc>>16)&0xFF) << (char)((actual_fourcc>>24)&0xFF) << std::endl;
+
     return true;
 }
 //主要做设备检测、线程池创建、设备启动等工作，实际采集工作在captureLoop中进行
@@ -63,13 +69,14 @@ bool CentralCamManager::hasCentralCamera() const {
 }
 
 std::string CentralCamManager::generateTimestampFilename() {
-    // 生成格式：YYYYMMDD_HHMMSS.png
+    // 生成格式：YYYYMMDD_HHMMSS_uuuuuu
     auto now = std::chrono::system_clock::now();
     auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()) % 1000000;
 
     std::stringstream ss;
     ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S")
-       << ".png";
+       << "_" << std::setw(6) << std::setfill('0') << microseconds.count();
     return ss.str();
 }
 
@@ -86,7 +93,9 @@ void CentralCamManager::captureLoop() {
         }
         // 创建这个唯一的目录
         file_manager_.createDirectory(img_path, false);
-
+        //目录下创建名字为timestamp.txt的文件
+        std::ofstream timestamp_file(img_path + "/timestamp.txt");
+        timestamp_file.close();
         while (CentralCamManager::isRunning()) {
             Mat frame;
             std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
@@ -96,6 +105,13 @@ void CentralCamManager::captureLoop() {
             }
             // 生成带时间戳的文件名
             std::string filename = generateTimestampFilename();
+			std::string timestamp_path = img_path + "/timestamp.txt";
+            if (!file_manager_.saveTimestampTxt(timestamp_path, filename)) {
+                std::cerr << "Failed to save timestamp: " << timestamp_path << std::endl;
+            } else {
+                std::cout << "Saved timestamp: " << timestamp_path << std::endl;
+            }
+            filename += ".png"; // 添加文件扩展名
             std::string full_path = img_path + "/";
             full_path += filename;
             if (!file_manager_.saveImage(full_path,frame)) {

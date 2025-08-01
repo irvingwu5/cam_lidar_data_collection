@@ -83,6 +83,18 @@ bool FileManager::saveImage(const std::string &full_path, const cv::Mat &image) 
     return cv::imwrite(full_path, image);
 }
 
+bool FileManager::saveTimestampTxt(const std::string &txt_full_path, const std::string time){
+    std::ofstream ofs(txt_full_path, std::ios::app);
+    if (ofs.is_open()) {
+        ofs << time << std::endl;
+        ofs.close();
+        return true;
+    } else {
+        std::cerr << "Failed to open file for writing: " << txt_full_path << std::endl;
+        return false;
+    }
+}
+
 bool FileManager::is_usb_inserted()
 {
     const std::string usb_mount_path = get_usb_session_folder();

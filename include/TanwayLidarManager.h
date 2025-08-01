@@ -55,4 +55,5 @@ private:
     // 新增：线程控制变量
     std::atomic<bool> is_running_{false};  // 控制采集状态
     std::thread capture_thread_;           // 采集线程句柄
+    std::string generateTimestampFilename();// 生成带时间戳的文件名
 };

@@ -50,6 +50,7 @@ public:
     bool createDirectory(const std::string &namefile,bool is_has_root = true);
     bool deleteFile(const std::string &filename);
     bool saveImage(const std::string& full_path, const cv::Mat& image);
+    bool saveTimestampTxt(const std::string &txt_full_path, const std::string time);
     bool is_usb_inserted();
     std::string get_usb_session_folder();
     std::string get_parent_path(const std::string &path);

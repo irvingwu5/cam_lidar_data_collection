@@ -88,10 +88,9 @@ void SocketServer::start()
     TanwayLidarManager tanwayLidarManager(client_fd, fileManager);
     tanwayLidarManager.initialize();
 
-    // BaseCameraManager base_camera_manager = BaseCameraManager(fileManager);
-    CentralCamManager central_cam_manager("/dev/video0", 1920, 1080, fileManager);
+    CentralCamManager central_cam_manager("/dev/video0", 1920, 1080, fileManager); //1240,370
     central_cam_manager.init();
-    SideCamManager side_cam_manager("/dev/video2",1920,1080,fileManager);
+    SideCamManager side_cam_manager("/dev/video2", 1920, 1080, fileManager); //1920，1080
     side_cam_manager.init();
     std::string init_info = get_init_info(fileManager, benewakeLidarManager,tanwayLidarManager, central_cam_manager, side_cam_manager);
     send(client_fd, init_info.c_str(), init_info.size(), 0);

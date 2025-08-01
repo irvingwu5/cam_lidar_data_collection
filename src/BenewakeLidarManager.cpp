@@ -84,6 +84,20 @@ void BenewakeLidarManager::stop()
     // 释放线程池
     pool.reset();
 }
+
+std::string BenewakeLidarManager::generateTimestampFilename()
+{
+    // 生成格式：YYYYMMDD_HHMMSS_uuuuuu
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()) % 1000000;
+
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S")
+       << "_" << std::setw(6) << std::setfill('0') << microseconds.count();
+    return ss.str();
+}
+
 void BenewakeLidarManager::main_loop()
 {
     int cur_frame = 0;
@@ -104,6 +118,9 @@ void BenewakeLidarManager::main_loop()
     else
         dir = dir + "/" + std::to_string(number);
     fileManager.createDirectory(dir,false);
+    std::ofstream timestamp_file(dir + "/timestamp.txt");
+    timestamp_file.close();
+
     // 帧率统计变量
     int frame_counter = 0;
     auto last_time = std::chrono::steady_clock::now();
@@ -117,11 +134,21 @@ void BenewakeLidarManager::main_loop()
             std::cerr << "[ERROR] LIDAR data failed, code: " << err << std::endl;
             continue;
         }
+        std::string timestamp = generateTimestampFilename();
+        std::string timestamp_path = dir + "/timestamp.txt";
+        if (!fileManager.saveTimestampTxt(timestamp_path, timestamp))
+        {
+            std::cerr << "[ERROR] Failed to save timestamp: " << timestamp_path << std::endl;
+        }
+        else
+        {
+            std::cout << "[INFO] Saved timestamp: " << timestamp_path << std::endl;
+        }
         std::ostringstream oss;
 
         if (pointCloud->points.size() > 0)
         {
-            oss << dir << "/frame_" << std::setw(6) << std::setfill('0') << cur_frame << ".bin";
+            oss << dir << "/" << timestamp << ".bin";
             std::string path = oss.str();
             pool->enqueue([=]
                           { 

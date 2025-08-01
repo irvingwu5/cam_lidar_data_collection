@@ -14,13 +14,15 @@ SideCamManager::~SideCamManager() {
 }
 
 bool SideCamManager::init() {
-    //尝试打开摄像头
-    if (!capture_.open(device_path_)) {
-        std::cerr << "\nThe central camera does not exist\n" << std::endl;
+    std::cout << "Trying to open side camera: " << device_path_ << std::endl;
+    if (!capture_.open(device_path_,cv::CAP_V4L2)) {
+        std::cerr << "Open Side camera timeout" << std::endl;
         hasSideCam = false;
         return false;
     }
     hasSideCam = true;
+    // 延长延迟至300ms，等待UVC摄像头硬件初始化（尤其高分辨率模式）
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
     //设置摄像头编码格式
     capture_.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M','J','P','G'));
     //设置摄像头分辨率
@@ -32,6 +34,12 @@ bool SideCamManager::init() {
             "resolution and will use the default resolution 1280*720" << std::endl;
         capture_.set(CAP_PROP_FRAME_WIDTH, 1280);
         capture_.set(CAP_PROP_FRAME_HEIGHT, 720);
+    }
+    // 设置分辨率后检查实际值
+    int actual_width = capture_.get(CAP_PROP_FRAME_WIDTH);
+    int actual_height = capture_.get(CAP_PROP_FRAME_HEIGHT);
+    if (actual_width != width_ || actual_height != height_) {
+        std::cerr << "Actual resolution: " << actual_width << "*" << actual_height << std::endl;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(100));//增加短暂延迟，等待摄像头初始化完成
     return true;
@@ -63,13 +71,14 @@ bool SideCamManager::hasSideCamera() const {
 }
 
 std::string SideCamManager::generateTimestampFilename() {
-    // 生成格式：YYYYMMDD_HHMMSS.png
+    // 生成格式：YYYYMMDD_HHMMSS_uuuuuu
     auto now = std::chrono::system_clock::now();
     auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()) % 1000000;
 
     std::stringstream ss;
     ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S")
-       << ".png";
+       << "_" << std::setw(6) << std::setfill('0') << microseconds.count();
     return ss.str();
 }
 
@@ -83,6 +92,9 @@ void SideCamManager::captureLoop() {
         else
             img_path = img_path + "/" + std::to_string(number);
         file_manager_.createDirectory(img_path, false); // 创建目录，如果不存在
+        //目录下创建名字为timestamp.txt的文件
+        std::ofstream timestamp_file(img_path + "/timestamp.txt");
+        timestamp_file.close();
         while (SideCamManager::isRunning()) {
             Mat frame;
             std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
@@ -92,6 +104,13 @@ void SideCamManager::captureLoop() {
             }
             // 生成带时间戳的文件名
             std::string filename = generateTimestampFilename();
+			std::string timestamp_path = img_path + "/timestamp.txt";
+            if (!file_manager_.saveTimestampTxt(timestamp_path, filename)) {
+                std::cerr << "Failed to save timestamp: " << timestamp_path << std::endl;
+            } else {
+                std::cout << "Saved timestamp: " << timestamp_path << std::endl;
+            }
+            filename += ".png"; // 添加文件扩展名
             std::string full_path = img_path + "/";
             full_path += filename;
             if (!file_manager_.saveImage(full_path,frame)) {

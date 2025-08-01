@@ -21,7 +21,7 @@ int main(int argc, char **argv)
 	// 启动服务器线程
 	std::thread server_thread([]()
 							  {
-        SocketServer server(8080);
+        SocketServer server(8081);
 		while(Config::stopRun){
         server.start();
  } });

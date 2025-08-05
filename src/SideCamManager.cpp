@@ -1,6 +1,7 @@
 #include "SideCamManager.h"
+#include "UsbDeviceReset.h"
 using namespace cv;
-
+#include <fstream>
 SideCamManager::SideCamManager(const std::string& device_path, int width, int height, FileManager& file_manager)
     : device_path_(device_path),
     width_(width),
@@ -13,35 +14,51 @@ SideCamManager::~SideCamManager() {
     stopCapture();
 }
 
+bool SideCamManager::isDeviceAvailable(const std::string& device_path) const {
+    std::ifstream dev(device_path);
+    return dev.good();
+}
+
 bool SideCamManager::init() {
     std::cout << "Trying to open side camera: " << device_path_ << std::endl;
-    if (!capture_.open(device_path_,cv::CAP_V4L2)) {
-        std::cerr << "Open Side camera timeout" << std::endl;
-        hasSideCam = false;
-        return false;
+    // 3. 首次尝试打开摄像头，失败则重置
+    if (!capture_.open(device_path_)) {
+        std::cerr << "Failed to open side camera. Attempting to reset USB device..." << std::endl;
+
+        if (usb_utils::resetUsbDevice(device_path_)) {
+            std::cout << "USB device reset successful. Retrying to open camera..." << std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(2)); // 等待设备重新初始化
+
+            if (!capture_.open(device_path_)) {
+                std::cerr << "Failed to open side camera after reset." << std::endl;
+                hasSideCam = false;
+                return false;
+            }
+        } else {
+            std::cerr << "Failed to reset USB device." << std::endl;
+            hasSideCam = false;
+            return false;
+        }
     }
+    std::cout << "Side camera opened successfully." << std::endl;
     hasSideCam = true;
     // 延长延迟至300ms，等待UVC摄像头硬件初始化（尤其高分辨率模式）
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     //设置摄像头编码格式
     capture_.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M','J','P','G'));
     //设置摄像头分辨率
-    bool setWidth = capture_.set(CAP_PROP_FRAME_WIDTH, width_);
-    bool setHeight = capture_.set(CAP_PROP_FRAME_HEIGHT, height_);
-    //检查分辨率是否设置正确
-    if (!setWidth || !setHeight) {
-        std::cerr<<"Warning: The camera does not support" << width_ << "*" << height_ <<
-            "resolution and will use the default resolution 1280*720" << std::endl;
-        capture_.set(CAP_PROP_FRAME_WIDTH, 1280);
-        capture_.set(CAP_PROP_FRAME_HEIGHT, 720);
-    }
-    // 设置分辨率后检查实际值
-    int actual_width = capture_.get(CAP_PROP_FRAME_WIDTH);
-    int actual_height = capture_.get(CAP_PROP_FRAME_HEIGHT);
-    if (actual_width != width_ || actual_height != height_) {
-        std::cerr << "Actual resolution: " << actual_width << "*" << actual_height << std::endl;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));//增加短暂延迟，等待摄像头初始化完成
+    capture_.set(CAP_PROP_FRAME_WIDTH, width_);
+    capture_.set(CAP_PROP_FRAME_HEIGHT, height_);
+    // 3. 设置帧率（30fps，设备支持且稳定）
+    capture_.set(CAP_PROP_FPS, 30);
+    // 验证实际参数（可选，确保设置生效）
+    int actual_fps = capture_.get(CAP_PROP_FPS);
+    int actual_fourcc = capture_.get(CAP_PROP_FOURCC);
+    std::cout << "Actual FPS: " << actual_fps << ", Actual Format: "
+              << (char)(actual_fourcc&0xFF) << (char)((actual_fourcc>>8)&0xFF)
+              << (char)((actual_fourcc>>16)&0xFF) << (char)((actual_fourcc>>24)&0xFF)
+              << ", Actual Width: " << capture_.get(CAP_PROP_FRAME_WIDTH)
+              << ", Actual Height: " << capture_.get(CAP_PROP_FRAME_HEIGHT) << std::endl;
     return true;
 }
 //主要做设备检测、线程池创建、设备启动等工作，实际采集工作在captureLoop中进行
@@ -58,8 +75,18 @@ void SideCamManager::stopCapture() {
     if (capture_thread_.joinable()) {
         capture_thread_.join(); // 等待采集线程结束
     }
-    std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
-    capture_.release(); // 释放摄像头资源
+    if(capture_.isOpened()){
+        capture_.release(); // 释放摄像头资源
+        // 增加延迟，确保硬件释放设备
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+	// 4. 停止采集后重置USB设备
+    std::cout << "Resetting USB device " << device_path_ << " after stopping capture." << std::endl;
+    if (!usb_utils::resetUsbDevice(device_path_)) {
+       std::cerr << "Warning: Failed to reset USB device " << device_path_ << " after use." << std::endl;
+    }
+    hasSideCam = false; // 标记为未持有摄像头
+    std::cout << "Side Camera " << device_path_ << " stopped and released." << std::endl;
 }
 
 bool SideCamManager::isRunning() const {

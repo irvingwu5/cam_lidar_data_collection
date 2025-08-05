@@ -88,9 +88,9 @@ void SocketServer::start()
     TanwayLidarManager tanwayLidarManager(client_fd, fileManager);
     tanwayLidarManager.initialize();
 
-    CentralCamManager central_cam_manager("/dev/video0", 1920, 1080, fileManager); //1240,370
+    CentralCamManager central_cam_manager("/dev/video0", 1280, 1024, fileManager); //1240,370
     central_cam_manager.init();
-    SideCamManager side_cam_manager("/dev/video2", 1920, 1080, fileManager); //1920，1080
+    SideCamManager side_cam_manager("/dev/video2", 1280, 1024, fileManager); //1920，1080
     side_cam_manager.init();
     std::string init_info = get_init_info(fileManager, benewakeLidarManager,tanwayLidarManager, central_cam_manager, side_cam_manager);
     send(client_fd, init_info.c_str(), init_info.size(), 0);
@@ -189,16 +189,22 @@ std::string SocketServer::dealCentralCam(CentralCamManager &central_camera_manag
     std::string status = "1", error = "",info="";
     if (central_camera_manager.hasCentralCamera()) {
         if (isStart) {
-            std::thread task_thread([&central_camera_manager](){central_camera_manager.startCapture();});
-            task_thread.detach();//后台运行
-            info = "\nThe central camera starts to collect data\n";
+            if(central_camera_manager.startCapture()) {
+            //std::thread task_thread([&central_camera_manager](){central_camera_manager.startCapture();});
+            //task_thread.detach();//后台运行
+                info = "\nThe central camera starts to collect data\n";
+            }else {
+                status = "0";
+                error = "central cam failed to start(startCapture returned false)";
+                std::cerr << error << std::endl; // 输出到控制台便于调试
+            }
         }else {
-            info = "\nThe central camera has stopped collecting data\n";
             central_camera_manager.stopCapture();
+            info = "The central camera has stopped collecting data\n";
         }
-    }else {
-        status = "0";
-        error = "central cam doesn't exit";
+    }else{
+            status = "0";
+            error = "central cam doesn't exit";
     }
     std::string return_info = "{status: " + status +
                               ", path: " + save_path +
@@ -212,12 +218,18 @@ std::string SocketServer::dealSideCam(SideCamManager &side_cam_manager, std::str
     std::string status = "1", error = "",info="";
     if (side_cam_manager.hasSideCamera()) {
         if (isStart) {
-            std::thread task_thread([&side_cam_manager](){side_cam_manager.startCapture();});
-            task_thread.detach();//后台运行
+            if(side_cam_manager.startCapture()) {
+            //std::thread task_thread([&side_cam_manager](){side_cam_manager.startCapture();});
+            //task_thread.detach();//后台运行
             info = "\nThe side camera starts to collect data\n";
+            }else {
+                status = "0";
+                error = "side cam failed to start(startCapture returned false)";
+                std::cerr << error << std::endl; // 输出到控制台便于调试
+            }
         }else {
-            info = "\nThe side camera has stopped collecting data\n";
             side_cam_manager.stopCapture();
+            info = "\nThe side camera has stopped collecting data\n";
         }
     }else {
         status = "0";
@@ -289,9 +301,10 @@ std::string SocketServer::process_command(const std::string &command,
         return "Two camera start to take data!";
     }
     else if (cmd == "all_cam_end"){
-        dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
-        dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
-        return "Two camera stop to take data!";
+        std::string central_response = dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
+        std::string side_response = dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
+        return "{central_cam_stop_result:}" + central_response +
+               ", {side_cam_stop_result:}" + side_response;
     }
     // 创建保存目录
     else if (cmd == "create_path")

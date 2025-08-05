@@ -18,7 +18,7 @@ public:
 private:
     void captureLoop();
     std::string generateTimestampFilename();// 生成带时间戳的文件名
-
+    bool isDeviceAvailable(const std::string& device_path) const;
     std::string device_path_;
     int width_;
     int height_;

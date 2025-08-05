@@ -165,8 +165,6 @@ void BenewakeLidarManager::main_loop()
             cur_frame++;
             frame_counter++;
         }
-
-       
         // 每秒打印一次帧率
         auto now = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_time);

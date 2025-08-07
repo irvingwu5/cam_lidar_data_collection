@@ -16,7 +16,7 @@ public:
     void stopCapture();
     bool isRunning() const;
     bool hasCentralCamera() const;
-    bool releaseDevice();
+    bool resetFlag();
 private:
     void captureLoop();
     std::string generateTimestampFilename();// 生成带时间戳的文件名

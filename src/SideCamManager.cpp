@@ -27,11 +27,6 @@ bool SideCamManager::init() {
         return false;
     }
 
-    // 2. 释放可能残留的资源
-    if (capture_.isOpened()) {
-        capture_.release();
-    }
-
     std::cout << "Trying to open side camera: " << device_path_ << std::endl;
 
     // 3. 直接尝试打开摄像头
@@ -208,12 +203,7 @@ void SideCamManager::captureLoop() {
     is_running_ = false; // 确保线程退出时状态正确
 }
 
-bool SideCamManager::releaseDevice() {
-    if (capture_.isOpened()) {
-        std::cout << "Releasing Side Camera " << device_path_ << std::endl;
-        capture_.release();
-        std::cout << "Side Camera " << device_path_ << " released" << std::endl;
-    }
+bool SideCamManager::resetFlag() {
     hasSideCam = false; // 重置摄像头状态
     is_running_ = false; // 确保状态正确
     return true;

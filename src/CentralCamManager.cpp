@@ -28,11 +28,6 @@ bool CentralCamManager::init() {
         return false;
     }
 
-    // 2. 释放可能残留的资源
-    if (capture_.isOpened()) {
-        capture_.release();
-    }
-
     std::cout << "Trying to open central camera: " << device_path_ << std::endl;
 
     // 3. 直接尝试打开摄像头
@@ -210,13 +205,7 @@ void CentralCamManager::captureLoop() {
     is_running_ = false; // 确保在异常情况下也能正确标记为未运行
 }
 
-bool CentralCamManager::releaseDevice(){
-    // 释放资源
-    if (capture_.isOpened()) {
-        std::cout << "Releasing Central Camera " << device_path_ << std::endl;
-        capture_.release();
-        std::cout << "Central Camera " << device_path_ << " released" << std::endl;
-    }
+bool CentralCamManager::resetFlag(){
     hasCentralCam = false; // 标记为未持有摄像头
     is_running_ = false; // 确保状态正确
     return true;

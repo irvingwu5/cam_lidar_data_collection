@@ -335,8 +335,8 @@ std::string SocketServer::process_command(const std::string &command,
     else if (cmd == "close")
     {
         Config::stopRun = false;
-        central_cam_manager.releaseDevice();
-        side_cam_manager.releaseDevice();
+        central_cam_manager.resetFlag();
+        side_cam_manager.resetFlag();
         return "The program has been closed and the service needs to be restarted";
     }
     else

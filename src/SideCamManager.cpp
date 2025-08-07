@@ -1,7 +1,8 @@
 #include "SideCamManager.h"
 #include "UsbDeviceReset.h"
 using namespace cv;
-#include <fstream>
+#include <chrono>
+
 SideCamManager::SideCamManager(const std::string& device_path, int width, int height, FileManager& file_manager)
     : device_path_(device_path),
     width_(width),
@@ -20,30 +21,68 @@ bool SideCamManager::isDeviceAvailable(const std::string& device_path) const {
 }
 
 bool SideCamManager::init() {
+    // 1. 检查设备是否存在
+    if (!isDeviceAvailable(device_path_)) {
+        std::cerr << "Device " << device_path_ << " is not accessible (maybe occupied)" << std::endl;
+        return false;
+    }
     std::cout << "Trying to open side camera: " << device_path_ << std::endl;
+    // 先释放可能残留的资源
+    if (capture_.isOpened()) {
+        capture_.release();
+        std::cout << "Released previous capture resource." << std::endl;
+    }
     // 3. 首次尝试打开摄像头，失败则重置
     if (!capture_.open(device_path_)) {
-        std::cerr << "Failed to open side camera. Attempting to reset USB device..." << std::endl;
+        std::cerr << "Open Side camera timeout" << std::endl;
+        hasSideCam = false;
+        return false;
+    }
+    // 用线程尝试打开摄像头，避免阻塞主线程
+    std::atomic<bool> open_success(false);
+    std::thread open_thread([&]() {
+        open_success = capture_.open(device_path_);
+    });
 
-        if (usb_utils::resetUsbDevice(device_path_)) {
-            std::cout << "USB device reset successful. Retrying to open camera..." << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(2)); // 等待设备重新初始化
+    // 超时等待（3秒）
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool ready = false;
 
-            if (!capture_.open(device_path_)) {
-                std::cerr << "Failed to open side camera after reset." << std::endl;
-                hasSideCam = false;
-                return false;
-            }
-        } else {
-            std::cerr << "Failed to reset USB device." << std::endl;
-            hasSideCam = false;
-            return false;
+    // 启动超时等待线程
+    std::thread timeout_thread([&]() {
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        if (!ready) {
+            std::cerr << "Open side camera timeout (3s)" << std::endl;
+            // 超时后强制标记失败
+            open_success = false;
         }
+        cv.notify_one();
+    });
+
+    // 等待打开结果或超时
+    std::unique_lock<std::mutex> lock(mtx);
+    cv.wait(lock, [&]() {
+        ready = true;
+        return !open_thread.joinable() || !open_success;
+    });
+
+    // 清理线程
+    if (open_thread.joinable()) {
+        open_thread.join();
+    }
+    if (timeout_thread.joinable()) {
+        timeout_thread.join();
+    }
+
+    if (!open_success) {
+        std::cerr << "The side camera does not exist or is occupied" << std::endl;
+        hasSideCam = false;
+        return false;
     }
     std::cout << "Side camera opened successfully." << std::endl;
-    hasSideCam = true;
     // 延长延迟至300ms，等待UVC摄像头硬件初始化（尤其高分辨率模式）
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
     //设置摄像头编码格式
     capture_.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M','J','P','G'));
     //设置摄像头分辨率
@@ -59,12 +98,30 @@ bool SideCamManager::init() {
               << (char)((actual_fourcc>>16)&0xFF) << (char)((actual_fourcc>>24)&0xFF)
               << ", Actual Width: " << capture_.get(CAP_PROP_FRAME_WIDTH)
               << ", Actual Height: " << capture_.get(CAP_PROP_FRAME_HEIGHT) << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    hasSideCam = true; // 标记为持有摄像头
     return true;
 }
 //主要做设备检测、线程池创建、设备启动等工作，实际采集工作在captureLoop中进行
 bool SideCamManager::startCapture() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!capture_.isOpened() && !init()) return false;
+    if (is_running_) {
+        std::cout << "Side camera is already running" << std::endl;
+        return true;
+    }
+
+    // 二次检查设备是否可用（关键修改）
+    if (!isDeviceAvailable(device_path_)) {
+        std::cerr << "Device " << device_path_ << " is occupied, cannot start" << std::endl;
+        return false;
+    }
+
+    // 确保相机已初始化
+    if (!capture_.isOpened() && !init()) {
+        std::cerr << "Failed to start capture: initialization failed" << std::endl;
+        return false;
+    }
+
     is_running_ = true;
     capture_thread_ = std::thread(&SideCamManager::captureLoop, this);
     return true;
@@ -72,21 +129,32 @@ bool SideCamManager::startCapture() {
 
 void SideCamManager::stopCapture() {
     if (!is_running_.exchange(false)) return; // 如果未在运行，则直接返回
+
+    // 主动唤醒阻塞的read()
+    if (capture_.isOpened()) {
+        std::lock_guard<std::mutex> lock(capture_mutex_);
+        capture_.grab(); // 中断read()阻塞
+    }
+
+    // 等待线程退出（延长超时至2秒，降低误报）
     if (capture_thread_.joinable()) {
-        capture_thread_.join(); // 等待采集线程结束
+        auto start = std::chrono::steady_clock::now();
+        const auto timeout = std::chrono::seconds(5); // 超时延长至2秒
+
+        while (capture_thread_.joinable()) {
+            auto now = std::chrono::steady_clock::now();
+            if (now - start >= timeout) {
+                std::cerr << "Warning: Side capture thread did not exit in time" << std::endl;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20)); // 稍长休眠减少CPU占用
+        }
+        if (capture_thread_.joinable()) {
+            capture_thread_.join();
+        }
     }
-    if(capture_.isOpened()){
-        capture_.release(); // 释放摄像头资源
-        // 增加延迟，确保硬件释放设备
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-	// 4. 停止采集后重置USB设备
-    std::cout << "Resetting USB device " << device_path_ << " after stopping capture." << std::endl;
-    if (!usb_utils::resetUsbDevice(device_path_)) {
-       std::cerr << "Warning: Failed to reset USB device " << device_path_ << " after use." << std::endl;
-    }
-    hasSideCam = false; // 标记为未持有摄像头
-    std::cout << "Side Camera " << device_path_ << " stopped and released." << std::endl;
+    is_running_ = false; // 确保状态正确
+    std::cout << "Side Camera " << device_path_ << " stopped" << std::endl;
 }
 
 bool SideCamManager::isRunning() const {
@@ -114,21 +182,41 @@ void SideCamManager::captureLoop() {
     try {
         std::string img_path = file_manager_.get_side_cam_path();
         int number = file_manager_.getPathCount(img_path);
-        if (number < 10)
-            img_path = img_path + "/0" + std::to_string(number);
-        else
-            img_path = img_path + "/" + std::to_string(number);
-        file_manager_.createDirectory(img_path, false); // 创建目录，如果不存在
+        img_path += (number < 10) ? "/0" + std::to_string(number) : "/" + std::to_string(number);
+        // 创建这个唯一的目录
+        if (!file_manager_.createDirectory(img_path, false)) {
+            throw std::runtime_error("Failed to create capture directory: " + img_path);
+        }
         //目录下创建名字为timestamp.txt的文件
-        std::ofstream timestamp_file(img_path + "/timestamp.txt");
+        // 初始化时间戳文件
+        std::string timestamp_path = img_path + "/timestamp.txt";
+        std::ofstream timestamp_file(timestamp_path);
+        if (!timestamp_file.is_open()) {
+            throw std::runtime_error("Failed to create timestamp file: " + timestamp_path);
+        }
         timestamp_file.close();
-        while (SideCamManager::isRunning()) {
+        // 设置非阻塞模式（关键修改）
+        {
+            std::lock_guard<std::mutex> lock(capture_mutex_);
+            capture_.set(CAP_PROP_BUFFERSIZE, 1); // 减少缓冲区大小，降低阻塞概率
+        }
+        int read_fail_count = 0;
+        const int MAX_READ_FAILS = 5;
+
+        while (is_running_) {
             Mat frame;
-            std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
-            if (!capture_.read(frame)) {
-                std::cerr << "Failed to capture frame from camera." << std::endl;
-                continue; // 如果读取失败，继续下一次循环
+            bool read_success = false;
+            {
+                std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
+                if (!capture_.isOpened()) break; // 如果摄像头未打开，退出循环
+                read_success = capture_.read(frame); // 非阻塞读取
             }
+            if (!read_success) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                continue;
+            }
+            read_fail_count = 0; // 重置读取失败计数
+
             // 生成带时间戳的文件名
             std::string filename = generateTimestampFilename();
 			std::string timestamp_path = img_path + "/timestamp.txt";
@@ -151,7 +239,17 @@ void SideCamManager::captureLoop() {
     } catch (...) {
         std::cerr << "Unknown error in capture loop." << std::endl;
     }
-
+    is_running_ = false; // 确保线程退出时状态正确
 }
 
+bool SideCamManager::releaseDevice() {
+    if (capture_.isOpened()) {
+        std::cout << "Releasing Side Camera " << device_path_ << std::endl;
+        capture_.release();
+        std::cout << "Side Camera " << device_path_ << " released" << std::endl;
+    }
+    hasSideCam = false; // 重置摄像头状态
+    is_running_ = false; // 确保状态正确
+    return true;
+}
 

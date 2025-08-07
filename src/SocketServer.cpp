@@ -203,8 +203,9 @@ std::string SocketServer::dealCentralCam(CentralCamManager &central_camera_manag
             info = "The central camera has stopped collecting data\n";
         }
     }else{
-            status = "0";
-            error = "central cam doesn't exit";
+        central_camera_manager.releaseDevice();//释放设备
+        status = "0";
+        error = "central cam has released";
     }
     std::string return_info = "{status: " + status +
                               ", path: " + save_path +
@@ -232,8 +233,9 @@ std::string SocketServer::dealSideCam(SideCamManager &side_cam_manager, std::str
             info = "\nThe side camera has stopped collecting data\n";
         }
     }else {
+        side_cam_manager.releaseDevice(); //释放设备
         status = "0";
-        error = "side cam doesn't exit";
+        error = "side cam has released";
     }
     std::string return_info = "{status: " + status +
                               ", path: " + save_path +
@@ -347,6 +349,8 @@ std::string SocketServer::process_command(const std::string &command,
     else if (cmd == "close")
     {
         Config::stopRun = false;
+        //central_cam_manager.releaseDevice();
+        //side_cam_manager.releaseDevice();
         return "The program has been closed and the service needs to be restarted";
     }
     else

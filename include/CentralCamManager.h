@@ -6,7 +6,7 @@
 #include <opencv2/opencv.hpp>
 #include <atomic>
 #include <iostream>
-#include <fstream>
+
 class CentralCamManager{
 public:
     CentralCamManager(const std::string& device_path, int width, int height, FileManager& file_manager);
@@ -16,6 +16,7 @@ public:
     void stopCapture();
     bool isRunning() const;
     bool hasCentralCamera() const;
+    bool releaseDevice();
 private:
     void captureLoop();
     std::string generateTimestampFilename();// 生成带时间戳的文件名

@@ -1,6 +1,7 @@
 #include "CentralCamManager.h"
 #include "UsbDeviceReset.h"
 using namespace cv;
+#include <chrono>
 
 CentralCamManager::CentralCamManager(const std::string& device_path, int width, int height, FileManager& file_manager)
     : device_path_(device_path),
@@ -20,41 +21,63 @@ bool CentralCamManager::isDeviceAvailable(const std::string& device_path) const{
 }
 
 bool CentralCamManager::init() {
-    std::cout << "Trying to open central camera: " << device_path_ << std::endl;
-    // 1. 检查设备是否存在
+	// 1. 检查设备是否存在
     if (!isDeviceAvailable(device_path_)) {
         std::cerr << "Device " << device_path_ << " is not accessible (maybe occupied)" << std::endl;
         return false;
     }
-    //尝试打开摄像头
-    //if (!capture_.open(device_path_)) {
-    //    std::cerr << "The central camera does not exist" << std::endl;
-    //    hasCentralCam = false;
-    //    return false; // 摄像头打开失败
-    //}
-// 3. 首次尝试打开摄像头，失败则重置
-    if (!capture_.open(device_path_)) {
-        std::cerr << "Failed to open side camera. Attempting to reset USB device..." << std::endl;
-
-        if (usb_utils::resetUsbDevice(device_path_)) {
-            std::cout << "USB device reset successful. Retrying to open camera..." << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(2)); // 等待设备重新初始化
-
-            if (!capture_.open(device_path_)) {
-                std::cerr << "Failed to open side camera after reset." << std::endl;
-                hasSideCam = false;
-                return false;
-            }
-        } else {
-            std::cerr << "Failed to reset USB device." << std::endl;
-            hasSideCam = false;
-            return false;
-        }
+    std::cout << "Trying to open central camera: " << device_path_ << std::endl;
+	// 先释放可能残留的资源
+	if (capture_.isOpened()) {
+        capture_.release();
     }
+    // 用线程尝试打开摄像头，避免阻塞主线程
+    std::atomic<bool> open_success(false);
+    std::thread open_thread([&]() {
+        open_success = capture_.open(device_path_);
+    });
+
+    // 超时等待（3秒）
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool ready = false;
+
+    // 启动超时等待线程
+    std::thread timeout_thread([&]() {
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        if (!ready) {
+            std::cerr << "Open central camera timeout (3s)" << std::endl;
+            // 超时后强制标记失败
+            open_success = false;
+        }
+        cv.notify_one();
+    });
+
+    // 等待打开结果或超时
+    std::unique_lock<std::mutex> lock(mtx);
+    cv.wait(lock, [&]() {
+        ready = true;
+        return !open_thread.joinable() || !open_success;
+    });
+
+    // 清理线程
+    if (open_thread.joinable()) {
+        open_thread.join();
+    }
+    if (timeout_thread.joinable()) {
+        timeout_thread.join();
+    }
+
+    if (!open_success) {
+        std::cerr << "The central camera does not exist or is occupied" << std::endl;
+        hasCentralCam = false;
+        return false;
+    }
+
     std::cout << "Central camera opened successfully." << std::endl;
-    hasCentralCam = true;
     // 延长延迟至300ms，等待UVC摄像头硬件初始化（尤其高分辨率模式）
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
     //设置摄像头编码格式
     capture_.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M','J','P','G'));
     //设置摄像头分辨率
@@ -62,6 +85,7 @@ bool CentralCamManager::init() {
     capture_.set(CAP_PROP_FRAME_HEIGHT, height_);
     // 3. 设置帧率（30fps，设备支持且稳定）
     capture_.set(CAP_PROP_FPS, 30);
+
     // 验证实际参数（可选，确保设置生效）
     int actual_fps = capture_.get(CAP_PROP_FPS);
     int actual_fourcc = capture_.get(CAP_PROP_FOURCC);
@@ -70,37 +94,65 @@ bool CentralCamManager::init() {
           << (char)((actual_fourcc>>16)&0xFF) << (char)((actual_fourcc>>24)&0xFF)
           << ", Actual Width: " << capture_.get(CAP_PROP_FRAME_WIDTH)
           << ", Actual Height: " << capture_.get(CAP_PROP_FRAME_HEIGHT) << std::endl;
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
+    hasCentralCam = true; // 标记为持有摄像头
     return true;
 }
 //主要做设备检测、线程池创建、设备启动等工作，实际采集工作在captureLoop中进行
 bool CentralCamManager::startCapture() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!capture_.isOpened() && !init()) return false;
+	if (is_running_) {
+        std::cout << "Central camera is already running" << std::endl;
+        return true;
+    }
+    // 二次检查设备是否可用（关键修改）
+    if (!isDeviceAvailable(device_path_)) {
+        std::cerr << "Device " << device_path_ << " is occupied, cannot start" << std::endl;
+        return false;
+    }
+    // 确保相机已初始化
+    if (!capture_.isOpened() && !init()) {
+        std::cerr << "Failed to start capture: initialization failed" << std::endl;
+        return false;
+    }
     is_running_ = true;
     capture_thread_ = std::thread(&CentralCamManager::captureLoop, this);
     return true;
 }
 
 void CentralCamManager::stopCapture() {
-    if (!is_running_.exchange(false)) return; // 如果未在运行，则直接返回
-    if (capture_thread_.joinable()) {
-        capture_thread_.join(); // 等待采集线程结束
+    if (!is_running_.exchange(false)) return;
+
+    // 主动唤醒阻塞的read()
+    if (capture_.isOpened()) {
+        std::lock_guard<std::mutex> lock(capture_mutex_);
+        capture_.grab(); // 中断read()阻塞
     }
-    {
-    std::lock_guard<std::mutex> lock(capture_mutex_);
-        if (capture_.isOpened()) {
-            capture_.release(); // 显式释放
+
+    // 等待线程退出（带超时检测）
+    if (capture_thread_.joinable()) {
+        // 使用chrono库计算超时时间
+        auto start = std::chrono::steady_clock::now();
+        const auto timeout = std::chrono::seconds(5); // 超时延长至5秒
+
+        // 循环等待线程退出，同时检测超时
+        while (capture_thread_.joinable()) {
+            auto now = std::chrono::steady_clock::now();
+            if (now - start >= timeout) {
+                std::cerr << "Warning: Central capture thread did not exit in time" << std::endl;
+                break; // 超时退出循环
+            }
+            // 短暂休眠后再次检查
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        // 如果线程仍可连接，尝试强制join（避免资源泄漏）
+        if (capture_thread_.joinable()) {
+            capture_thread_.join();
         }
     }
-    // 4. 停止采集后重置USB设备
-    std::cout << "Resetting USB device " << device_path_ << " after stopping capture." << std::endl;
-    if (!usb_utils::resetUsbDevice(device_path_)) {
-        std::cerr << "Warning: Failed to reset USB device " << device_path_ << " after use." << std::endl;
-    }
-    hasCentralCam = false; // 重置状态
-    is_running_ = false; // 停止运行状态
-    std::cout << "Central Camera " << device_path_ << " stopped and released." << std::endl;
+    is_running_ = false; // 确保在停止时正确标记为未运行
+    std::cout << "Central Camera " << device_path_ << " stopped" << std::endl;
 }
 
 bool CentralCamManager::isRunning() const {
@@ -129,23 +181,41 @@ void CentralCamManager::captureLoop() {
         // 在循环开始前，确定本次采集的唯一保存目录
         std::string img_path = file_manager_.get_central_cam_path();
         int number = file_manager_.getPathCount(img_path);
-        if (number < 10) {
-            img_path = img_path + "/0" + std::to_string(number);
-        } else {
-            img_path = img_path + "/" + std::to_string(number);
-        }
+        img_path += (number < 10) ? "/0" + std::to_string(number) : "/" + std::to_string(number);
         // 创建这个唯一的目录
-        file_manager_.createDirectory(img_path, false);
+        if (!file_manager_.createDirectory(img_path, false)) {
+            throw std::runtime_error("Failed to create capture directory: " + img_path);
+        }
         //目录下创建名字为timestamp.txt的文件
-        std::ofstream timestamp_file(img_path + "/timestamp.txt");
+        // 初始化时间戳文件
+        std::string timestamp_path = img_path + "/timestamp.txt";
+        std::ofstream timestamp_file(timestamp_path);
+        if (!timestamp_file.is_open()) {
+            throw std::runtime_error("Failed to create timestamp file: " + timestamp_path);
+        }
         timestamp_file.close();
+        // 设置非阻塞模式（关键修改）
+        {
+            std::lock_guard<std::mutex> lock(capture_mutex_);
+            capture_.set(CAP_PROP_BUFFERSIZE, 1); // 减少缓冲区大小，降低阻塞概率
+        }
+        int read_fail_count = 0;
+        const int MAX_READ_FAILS = 5;
+
         while (CentralCamManager::isRunning()) {
             Mat frame;
-            std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
-            if (!capture_.read(frame)) {
-                std::cerr << "Failed to capture frame from camera." << std::endl;
-                continue; // 如果读取失败，继续下一次循环
+            bool read_success = false;
+            {
+                std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
+                if (!capture_.isOpened()) break; // 如果摄像头未打开，退出循环
+                read_success = capture_.read(frame); // 非阻塞读取
             }
+            if (!read_success) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                continue;
+            }
+            read_fail_count = 0; // 重置读取失败计数
+
             // 生成带时间戳的文件名
             std::string filename = generateTimestampFilename();
 			std::string timestamp_path = img_path + "/timestamp.txt";
@@ -168,4 +238,17 @@ void CentralCamManager::captureLoop() {
     } catch (...) {
         std::cerr << "Unknown error in capture loop." << std::endl;
     }
+    is_running_ = false; // 确保在异常情况下也能正确标记为未运行
+}
+
+bool CentralCamManager::releaseDevice(){
+    // 释放资源
+    if (capture_.isOpened()) {
+        std::cout << "Releasing Central Camera " << device_path_ << std::endl;
+        capture_.release();
+        std::cout << "Central Camera " << device_path_ << " released" << std::endl;
+    }
+    hasCentralCam = false; // 标记为未持有摄像头
+    is_running_ = false; // 确保状态正确
+    return true;
 }

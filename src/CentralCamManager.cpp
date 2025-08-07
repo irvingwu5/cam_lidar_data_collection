@@ -21,82 +21,48 @@ bool CentralCamManager::isDeviceAvailable(const std::string& device_path) const{
 }
 
 bool CentralCamManager::init() {
-	// 1. 检查设备是否存在
+    // 1. 检查设备是否存在
     if (!isDeviceAvailable(device_path_)) {
-        std::cerr << "Device " << device_path_ << " is not accessible (maybe occupied)" << std::endl;
+        std::cerr << "Device " << device_path_ << " is not accessible." << std::endl;
+        hasCentralCam = false;
         return false;
     }
-    std::cout << "Trying to open central camera: " << device_path_ << std::endl;
-	// 先释放可能残留的资源
-	if (capture_.isOpened()) {
+
+    // 2. 释放可能残留的资源
+    if (capture_.isOpened()) {
         capture_.release();
     }
-    // 用线程尝试打开摄像头，避免阻塞主线程
-    std::atomic<bool> open_success(false);
-    std::thread open_thread([&]() {
-        open_success = capture_.open(device_path_);
-    });
 
-    // 超时等待（3秒）
-    std::mutex mtx;
-    std::condition_variable cv;
-    bool ready = false;
+    std::cout << "Trying to open central camera: " << device_path_ << std::endl;
 
-    // 启动超时等待线程
-    std::thread timeout_thread([&]() {
-        std::this_thread::sleep_for(std::chrono::seconds(3));
-        if (!ready) {
-            std::cerr << "Open central camera timeout (3s)" << std::endl;
-            // 超时后强制标记失败
-            open_success = false;
-        }
-        cv.notify_one();
-    });
-
-    // 等待打开结果或超时
-    std::unique_lock<std::mutex> lock(mtx);
-    cv.wait(lock, [&]() {
-        ready = true;
-        return !open_thread.joinable() || !open_success;
-    });
-
-    // 清理线程
-    if (open_thread.joinable()) {
-        open_thread.join();
-    }
-    if (timeout_thread.joinable()) {
-        timeout_thread.join();
-    }
-
-    if (!open_success) {
-        std::cerr << "The central camera does not exist or is occupied" << std::endl;
+    // 3. 直接尝试打开摄像头
+    if (!capture_.open(device_path_)) {
+        std::cerr << "Failed to open central camera: " << device_path_ << std::endl;
         hasCentralCam = false;
         return false;
     }
 
     std::cout << "Central camera opened successfully." << std::endl;
-    // 延长延迟至300ms，等待UVC摄像头硬件初始化（尤其高分辨率模式）
+    // 延长延迟至300ms，等待UVC摄像头硬件初始化
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
-    //设置摄像头编码格式
-    capture_.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M','J','P','G'));
-    //设置摄像头分辨率
-    capture_.set(CAP_PROP_FRAME_WIDTH, width_);
-    capture_.set(CAP_PROP_FRAME_HEIGHT, height_);
-    // 3. 设置帧率（30fps，设备支持且稳定）
-    capture_.set(CAP_PROP_FPS, 30);
+    // 4. 设置摄像头参数
+    capture_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+    capture_.set(cv::CAP_PROP_FRAME_WIDTH, width_);
+    capture_.set(cv::CAP_PROP_FRAME_HEIGHT, height_);
+    capture_.set(cv::CAP_PROP_FPS, 30);
 
-    // 验证实际参数（可选，确保设置生效）
-    int actual_fps = capture_.get(CAP_PROP_FPS);
-    int actual_fourcc = capture_.get(CAP_PROP_FOURCC);
+    // 5. 验证参数
+    int actual_fps = capture_.get(cv::CAP_PROP_FPS);
+    int actual_fourcc = capture_.get(cv::CAP_PROP_FOURCC);
     std::cout << "Actual FPS: " << actual_fps << ", Actual Format: "
-          << (char)(actual_fourcc&0xFF) << (char)((actual_fourcc>>8)&0xFF)
-          << (char)((actual_fourcc>>16)&0xFF) << (char)((actual_fourcc>>24)&0xFF)
-          << ", Actual Width: " << capture_.get(CAP_PROP_FRAME_WIDTH)
-          << ", Actual Height: " << capture_.get(CAP_PROP_FRAME_HEIGHT) << std::endl;
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+              << (char)(actual_fourcc & 0xFF) << (char)((actual_fourcc >> 8) & 0xFF)
+              << (char)((actual_fourcc >> 16) & 0xFF) << (char)((actual_fourcc >> 24) & 0xFF)
+              << ", Actual Width: " << capture_.get(cv::CAP_PROP_FRAME_WIDTH)
+              << ", Actual Height: " << capture_.get(cv::CAP_PROP_FRAME_HEIGHT) << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    hasCentralCam = true; // 标记为持有摄像头
+    hasCentralCam = true;
     return true;
 }
 //主要做设备检测、线程池创建、设备启动等工作，实际采集工作在captureLoop中进行
@@ -111,10 +77,13 @@ bool CentralCamManager::startCapture() {
         std::cerr << "Device " << device_path_ << " is occupied, cannot start" << std::endl;
         return false;
     }
-    // 确保相机已初始化
-    if (!capture_.isOpened() && !init()) {
-        std::cerr << "Failed to start capture: initialization failed" << std::endl;
-        return false;
+    // 关键修改：如果设备未打开（可能已被release），则重新初始化
+    if (!capture_.isOpened()) {
+        std::cout << "Central camera is not open. Initializing..." << std::endl;
+        if (!init()) {
+            std::cerr << "Failed to re-initialize central camera." << std::endl;
+            return false;
+        }
     }
     is_running_ = true;
     capture_thread_ = std::thread(&CentralCamManager::captureLoop, this);
@@ -202,7 +171,7 @@ void CentralCamManager::captureLoop() {
         int read_fail_count = 0;
         const int MAX_READ_FAILS = 5;
 
-        while (CentralCamManager::isRunning()) {
+        while (is_running_.load()) {
             Mat frame;
             bool read_success = false;
             {

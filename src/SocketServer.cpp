@@ -186,61 +186,47 @@ std::string SocketServer::dealBeneWakeLidar(BenewakeLidarManager &benewakeLidarM
 }
 
 std::string SocketServer::dealCentralCam(CentralCamManager &central_camera_manager, std::string save_path, bool isStart) {
-    std::string status = "1", error = "",info="";
-    if (central_camera_manager.hasCentralCamera()) {
-        if (isStart) {
-            if(central_camera_manager.startCapture()) {
-            //std::thread task_thread([&central_camera_manager](){central_camera_manager.startCapture();});
-            //task_thread.detach();//后台运行
-                info = "\nThe central camera starts to collect data\n";
-            }else {
-                status = "0";
-                error = "central cam failed to start(startCapture returned false)";
-                std::cerr << error << std::endl; // 输出到控制台便于调试
-            }
-        }else {
-            central_camera_manager.stopCapture();
-            info = "The central camera has stopped collecting data\n";
+    std::string status = "1", error = "", info = "";
+    if (isStart) {
+        if (central_camera_manager.startCapture()) {
+            info = "\nThe central camera starts to collect data\n";
+        } else {
+            status = "0";
+            error = "central cam failed to start (startCapture returned false)";
+            std::cerr << error << std::endl;
         }
-    }else{
-        central_camera_manager.releaseDevice();//释放设备
-        status = "0";
-        error = "central cam has released";
+    } else {
+        central_camera_manager.stopCapture();
+        info = "The central camera has stopped collecting data\n";
     }
+
     std::string return_info = "{status: " + status +
                               ", path: " + save_path +
-                              ", log: " + info +
-                              ", error: " + error +
+                              ", log: \"" + info + "\"" +
+                              ", error: \"" + error + "\"" +
                               "}";
     return return_info;
 }
 
 std::string SocketServer::dealSideCam(SideCamManager &side_cam_manager, std::string save_path, bool isStart) {
-    std::string status = "1", error = "",info="";
-    if (side_cam_manager.hasSideCamera()) {
-        if (isStart) {
-            if(side_cam_manager.startCapture()) {
-            //std::thread task_thread([&side_cam_manager](){side_cam_manager.startCapture();});
-            //task_thread.detach();//后台运行
+    std::string status = "1", error = "", info = "";
+    if (isStart) {
+        if (side_cam_manager.startCapture()) {
             info = "\nThe side camera starts to collect data\n";
-            }else {
-                status = "0";
-                error = "side cam failed to start(startCapture returned false)";
-                std::cerr << error << std::endl; // 输出到控制台便于调试
-            }
-        }else {
-            side_cam_manager.stopCapture();
-            info = "\nThe side camera has stopped collecting data\n";
+        } else {
+            status = "0";
+            error = "side cam failed to start (startCapture returned false)";
+            std::cerr << error << std::endl;
         }
-    }else {
-        side_cam_manager.releaseDevice(); //释放设备
-        status = "0";
-        error = "side cam has released";
+    } else {
+        side_cam_manager.stopCapture();
+        info = "\nThe side camera has stopped collecting data\n";
     }
+
     std::string return_info = "{status: " + status +
                               ", path: " + save_path +
-                              ", log: " + info +
-                              ", error: " + error +
+                              ", log: \"" + info + "\"" +
+                              ", error: \"" + error + "\"" +
                               "}";
     return return_info;
 }
@@ -349,8 +335,8 @@ std::string SocketServer::process_command(const std::string &command,
     else if (cmd == "close")
     {
         Config::stopRun = false;
-        //central_cam_manager.releaseDevice();
-        //side_cam_manager.releaseDevice();
+        central_cam_manager.releaseDevice();
+        side_cam_manager.releaseDevice();
         return "The program has been closed and the service needs to be restarted";
     }
     else

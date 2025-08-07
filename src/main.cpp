@@ -20,11 +20,12 @@ int main(int argc, char **argv)
 {
 	// 启动服务器线程
 	std::thread server_thread([]()
-							  {
+	{
         SocketServer server(8082);
 		while(Config::stopRun){
         server.start();
- } });
+        }
+    });
 
 	// 稍等服务器启动
 	std::this_thread::sleep_for(std::chrono::seconds(2));

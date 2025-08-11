@@ -1,5 +1,4 @@
 #include "CentralCamManager.h"
-#include "UsbDeviceReset.h"
 using namespace cv;
 #include <chrono>
 
@@ -7,7 +6,7 @@ CentralCamManager::CentralCamManager(const std::string& device_path, int width, 
     : device_path_(device_path),
     width_(width),
     height_(height),
-    file_manager_(file_manager),
+    file_manager_(file_manager),new
     hasCentralCam(false),
     is_running_(false){}
 

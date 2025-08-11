@@ -1,5 +1,4 @@
 #include "SideCamManager.h"
-#include "UsbDeviceReset.h"
 using namespace cv;
 #include <chrono>
 

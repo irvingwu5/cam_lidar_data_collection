@@ -294,6 +294,12 @@ std::string SocketServer::process_command(const std::string &command,
         return "{central_cam_stop_result:}" + central_response +
                ", {side_cam_stop_result:}" + side_response;
     }
+	else if (cmd == "64_lidar_and_central_cam_start"){
+		std::string tanway_response = dealTanwayLidar(tanwayLidarManager,fileManager.get_64_lidar_save_path(), true);
+		std::string cencam_response = dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),true);
+		return "{tanway_lidar_start_result:}" + tanway_response +
+               ", {central_cam_start_result:}" + cencam_response;
+	}
     // 创建保存目录
     else if (cmd == "create_path")
     {

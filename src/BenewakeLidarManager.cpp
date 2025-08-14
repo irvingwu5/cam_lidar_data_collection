@@ -152,6 +152,7 @@ void BenewakeLidarManager::main_loop()
                               cloud.clear();
                               std::string return_info = "{status: 1, log: [BenewakeLidar] Save path: " + path +
                                                             "}\n";
+                              std::lock_guard<std::mutex> lock(send_mutex);
                                send(client_socket, return_info.c_str(), return_info.size(), 0);
                              });
             cur_frame++;

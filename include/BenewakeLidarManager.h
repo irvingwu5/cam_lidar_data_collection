@@ -40,6 +40,6 @@ private:
     std::atomic<bool> is_running_{false};// 替代Config::running
     std::thread main_thread_;// 保存主线程句柄
     std::string generateTimestampFilename();// 生成带时间戳的文件名
-
+    std::mutex send_mutex; // 发送数据的互斥锁，确保线程安全
     void main_loop();
 };

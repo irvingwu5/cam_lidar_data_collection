@@ -172,6 +172,7 @@ void TanwayLidarManager::OnPointCloud(const LidarInfo &info, const UserPointClou
         cloud.clear(); // 清空点云数据，释放内存
         std::string return_info = "{status: 1, log: [TanwayLidarManager] Save path : " + filename.str() +
                                     "}\n";
+		std::lock_guard<std::mutex> lock(send_mutex);  // 互斥锁确保线程安全
         send(client_socket, return_info.c_str(), return_info.size(), 0);
         cur_frame++;
     };

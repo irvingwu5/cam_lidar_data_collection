@@ -20,7 +20,7 @@ class BenewakeLidarManager
 {
 public:
     BenewakeLidarManager(int client_socket,FileManager fileManager, const std::string &ip = "192.168.0.2", int port = 2469);
-
+    ~BenewakeLidarManager();
     bool initialize();
     bool hasLidar() const;
     void start();

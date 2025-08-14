@@ -21,6 +21,9 @@ int main(int argc, char **argv)
 	// 启动服务器线程
 	std::thread server_thread([]()
 	{
+		//防止端口被占用，先进行端口释放
+		//system("sudo fuser -k 8082/tcp");  // Linux 下释放端口
+		std::this_thread::sleep_for(std::chrono::seconds(1));
         SocketServer server(8082);
 		while(Config::stopRun){
         server.start();

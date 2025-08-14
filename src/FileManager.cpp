@@ -50,7 +50,7 @@ std::string FileManager::get_64_lidar_save_path()
 }
 
 std::string FileManager::get_central_cam_path() {
-    std::string full_path = Config::select_path+ "Sequences/" + Config::central_cam_path;
+    std::string full_path = Config::select_path + "Sequences/" + Config::central_cam_path;
     std::cout << "\ncentral_cam_save_path: " << full_path << std::endl;
     return full_path;
 }
@@ -79,11 +79,11 @@ bool FileManager::deleteFile(const std::string &filename)
     return system(cmd.c_str()) == 0;
 }
 
-bool FileManager::saveImage(const std::string &full_path, const cv::Mat &image) {
+bool FileManager::saveImage(const std::string &full_path, const cv::Mat &image) const {
     return cv::imwrite(full_path, image);
 }
 
-bool FileManager::saveTimestampTxt(const std::string &txt_full_path, const std::string time){
+bool FileManager::saveTimestampTxt(const std::string &txt_full_path, const std::string time) const{
     std::ofstream ofs(txt_full_path, std::ios::app);
     if (ofs.is_open()) {
         ofs << time << std::endl;
@@ -161,7 +161,7 @@ std::string FileManager::move_folder_contents(std::string &src_folder, const std
     return "";
 }
 
-void FileManager::savePointCloudAsKITTI(const std::vector<RadarPoint>& cloud, std::string oss)
+void FileManager::savePointCloudAsKITTI(const std::vector<RadarPoint>& cloud, std::string oss) const
 {
     std::ofstream ofs(oss, std::ios::out | std::ios::binary);
     if (!ofs.is_open())

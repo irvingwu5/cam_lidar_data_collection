@@ -231,12 +231,83 @@ std::string SocketServer::dealSideCam(SideCamManager &side_cam_manager, std::str
     return return_info;
 }
 
+std::string SocketServer::dealAllLidar(BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
+    FileManager &fileManager, bool isStart)
+{
+    std::string status = "1", error = "", info = "";
+    if (isStart)
+    {
+        std::thread task_thread([&benewakeLidarManager, &tanwayLidarManager]()
+                                { benewakeLidarManager.start(); tanwayLidarManager.start(); });
+        task_thread.detach(); // 后台运行
+        info = "两个雷达同时开始采集";
+    }
+    else
+    {
+        benewakeLidarManager.stop();
+        tanwayLidarManager.stop();
+        info = "两个雷达同时结束采集";
+    }
+    std::string return_info = "{status: " + status +
+                              ", log: \"" + info + "\"" +
+                              ", error: \"" + error + "\"" +
+                              "}";
+    return return_info;
+}
+
+std::string SocketServer::dealAllCam(CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager,
+    FileManager &fileManager, bool isStart)
+{
+    std::string status = "1", error = "", info = "";
+    if (isStart)
+    {
+        std::thread task_thread([&central_cam_manager, &side_cam_manager]()
+                                { central_cam_manager.startCapture(); side_cam_manager.startCapture(); });
+        task_thread.detach(); // 后台运行
+        info = "两个相机同时开始采集";
+    }
+    else
+    {
+        central_cam_manager.stopCapture();
+        side_cam_manager.stopCapture();
+        info = "两个相机同时结束采集";
+    }
+    std::string return_info = "{status: " + status +
+                              ", log: \"" + info + "\"" +
+                              ", error: \"" + error + "\"" +
+                              "}";
+    return return_info;
+}
+std::string SocketServer::dealAllDev(BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
+    CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager,FileManager &fileManager, bool isStart){
+    std::string status = "1", error = "", info = "";
+    if (isStart)
+    {
+        std::thread task_thread([&benewakeLidarManager, &tanwayLidarManager, &central_cam_manager, &side_cam_manager]()
+                                { benewakeLidarManager.start(); tanwayLidarManager.start(); central_cam_manager.startCapture(); side_cam_manager.startCapture(); });
+        task_thread.detach(); // 后台运行
+        info = "所有设备同时开始采集";
+    }
+    else
+    {
+        benewakeLidarManager.stop();
+        tanwayLidarManager.stop();
+        central_cam_manager.stopCapture();
+        side_cam_manager.stopCapture();
+        info = "所有设备同时结束采集";
+    }
+    std::string return_info = "{status: " + status +
+                              ", log: \"" + info + "\"" +
+                              ", error: \"" + error + "\"" +
+                              "}";
+    return return_info;
+}
 
 std::string SocketServer::process_command(const std::string &command,
                                          FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
                                          CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager)
 {
-    // 拆分命令名与参数
+    // 拆分命令名与参数，command:argument" 格式
     auto pos = command.find(':');
     std::string cmd = (pos != std::string::npos) ? command.substr(0, pos) : command;
     std::string arg = (pos != std::string::npos) ? command.substr(pos + 1) : "";
@@ -260,14 +331,12 @@ std::string SocketServer::process_command(const std::string &command,
     // 同时采集
     else if (cmd == "all_lidar_start")
     {
-        dealTanwayLidar(tanwayLidarManager,fileManager.get_64_lidar_save_path(), true);
-        dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), true);
+        dealAllLidar(benewakeLidarManager,tanwayLidarManager,fileManager, true);
         return "Hello Client!\n";
     }
     else if (cmd == "all_lidar_end")
     {
-        dealTanwayLidar(tanwayLidarManager,fileManager.get_64_lidar_save_path(), false);
-        dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), false);
+        dealAllLidar(benewakeLidarManager,tanwayLidarManager,fileManager, false);
         return "Goodbye Client!\n";
     }
     else if (cmd == "central_cam_start")
@@ -284,35 +353,16 @@ std::string SocketServer::process_command(const std::string &command,
         return dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
     }
     else if (cmd == "all_cam_start"){
-        dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),true);
-        dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),true);
-        return "Two camera start to take data!";
+        return dealAllCam(central_cam_manager, side_cam_manager, fileManager, true);
     }
     else if (cmd == "all_cam_end"){
-        std::string central_response = dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
-        std::string side_response = dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
-        return "{central_cam_stop_result:}" + central_response +
-               ", {side_cam_stop_result:}" + side_response;
+        return dealAllCam(central_cam_manager, side_cam_manager, fileManager, false);
     }
 	else if (cmd == "all_start"){
-		std::string tanway_response = dealTanwayLidar(tanwayLidarManager,fileManager.get_64_lidar_save_path(), true);
-		std::string cencam_response = dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),true);
-	    std::string side_response = dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),true);
-		std::string benewake_response = dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), true);
-		return "{tanway_lidar_start_result:}" + tanway_response +
-               ", {central_cam_start_result:}" + cencam_response;
-			   ", {side_cam_start_result:}" + side_response +
-			   ", {benewake_lidar_start_result:}" + benewake_response;
+		return dealAllDev(benewakeLidarManager,tanwayLidarManager,central_cam_manager, side_cam_manager, fileManager, true);
 	}
-	else if (cmd == "all_end"){
-	    std::string tanway_response = dealTanwayLidar(tanwayLidarManager,fileManager.get_64_lidar_save_path(), false);
-		std::string cencam_response = dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
-		std::string side_response = dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
-		std::string benewake_response = dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), false);
-		return "{tanway_lidar_stop_result:}" + tanway_response +
-               ", {central_cam_stop_result:}" + cencam_response +
-               ", {side_cam_stop_result:}" + side_response +
-               ", {benewake_lidar_stop_result:}" + benewake_response;
+	else if (cmd == "all_stop"){
+	    return dealAllDev(benewakeLidarManager,tanwayLidarManager,central_cam_manager, side_cam_manager, fileManager, false);
 	}
     // 创建保存目录
     else if (cmd == "create_path")
@@ -351,6 +401,12 @@ std::string SocketServer::process_command(const std::string &command,
         }
         return return_info;
     }
+	else if (cmd == "get_init_info")
+    {
+        // 获取初始化信息,刷新u盘状态
+        std::string init_info = get_init_info(fileManager, benewakeLidarManager,tanwayLidarManager, central_cam_manager, side_cam_manager);
+        return init_info;
+    }
     // 结束服务
     else if (cmd == "close")
     {
@@ -363,4 +419,8 @@ std::string SocketServer::process_command(const std::string &command,
     {
         return "Unknown command.\n";
     }
+	// *** 修正点: 为未知命令添加默认返回值 ***
+    std::string error_msg = "Unknown command: " + command;
+    std::cerr << error_msg << std::endl;
+    return "{status: 0, error: \"" + error_msg + "\"}";
 }

@@ -5,10 +5,14 @@
 #include <iomanip>
 #include "TimeUtils.h"
 BenewakeLidarManager::BenewakeLidarManager(int client_socket,FileManager fileManager, const std::string &ip, int port)
-    : lidar_ip(ip), lidar_port(port), save_enabled(false), fileManager(fileManager),client_socket(client_socket)
+    : lidar_ip(ip), lidar_port(port), save_enabled(false), fileManager(fileManager),client_socket(client_socket),
+    is_running_(false), lidar_present(false)  // 初始化原子变量
 {
 }
-
+// 添加析构函数，确保停止线程
+BenewakeLidarManager::~BenewakeLidarManager() {
+    stop();
+}
 bool BenewakeLidarManager::initialize()
 {
     lidar = std::make_shared<benewake::BenewakeLidar>(lidar_ip, lidar_port);
@@ -84,20 +88,6 @@ void BenewakeLidarManager::stop()
     // 释放线程池
     pool.reset();
 }
-
-std::string BenewakeLidarManager::generateTimestampFilename()
-{
-    // 生成格式：YYYYMMDD_HHMMSS_uuuuuu
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()) % 1000000;
-
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S")
-       << "_" << std::setw(6) << std::setfill('0') << microseconds.count();
-    return ss.str();
-}
-
 void BenewakeLidarManager::main_loop()
 {
     int cur_frame = 0;
@@ -151,13 +141,15 @@ void BenewakeLidarManager::main_loop()
             oss << dir << "/" << timestamp << ".bin";
             std::string path = oss.str();
             pool->enqueue([=]
-                          { 
+                          {
                                std::vector<RadarPoint> cloud;
                                 cloud.reserve(pointCloud->points.size());
                                 for(const auto pt : pointCloud->points){
-                                    cloud.emplace_back(pt.x, pt.y, pt.z, pt.intensity); 
+                                    cloud.emplace_back(pt.x, pt.y, pt.z, pt.intensity);
                                 }
                               fileManager.savePointCloudAsKITTI(cloud, path);
+                              //删除cloud释放内存
+                              cloud.clear();
                               std::string return_info = "{status: 1, log: [BenewakeLidar] Save path: " + path +
                                                             "}\n";
                                send(client_socket, return_info.c_str(), return_info.size(), 0);

@@ -38,6 +38,10 @@ private:
     std::string dealTanwayLidar(TanwayLidarManager &tanwayLidarManager,std::string save_path, bool isStart);
     std::string dealCentralCam(CentralCamManager &central_cam_manager, std::string save_path, bool isStart); //中间摄像头
     std::string dealSideCam(SideCamManager &side_cam_manager, std::string save_path, bool isStart); //侧方摄像头
+    std::string dealAllLidar(BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,FileManager &fileManager, bool isStart);
+    std::string dealAllCam(CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager, FileManager &fileManager, bool isStart);
+    std::string dealAllDev(BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
+    CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager,FileManager &fileManager, bool isStart);
     std::string get_init_info( FileManager &fileManager,BenewakeLidarManager &benewakeLidarManager,TanwayLidarManager &tanwayLidarManager,
         CentralCamManager &central_cam_manager, SideCamManager &side_cam_manager);
     std::string process_command(const std::string &command,

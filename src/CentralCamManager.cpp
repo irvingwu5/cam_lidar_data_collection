@@ -7,7 +7,7 @@ CentralCamManager::CentralCamManager(const std::string& device_path, int width, 
     : device_path_(device_path),
     width_(width),
     height_(height),
-    file_manager_(file_manager),new
+    file_manager_(file_manager),
     hasCentralCam(false),
     is_running_(false){}
 
@@ -139,17 +139,18 @@ bool CentralCamManager::hasCentralCamera() const {
     return hasCentralCam;
 }
 
+//摄像头循环采集图像并保存
 void CentralCamManager::captureLoop() {
     try {
         // 在循环开始前，确定本次采集的唯一保存目录
         std::string img_path = file_manager_.get_central_cam_path();
         int number = file_manager_.getPathCount(img_path);
         img_path += (number < 10) ? "/0" + std::to_string(number) : "/" + std::to_string(number);
-
+        // 创建这个唯一的目录
         if (!file_manager_.createDirectory(img_path, false)) {
             throw std::runtime_error("Failed to create capture directory: " + img_path);
         }
-
+        //目录下创建名字为timestamp.txt的文件
         // 初始化时间戳文件
         std::string timestamp_path = img_path + "/timestamp.txt";
         std::ofstream timestamp_file(timestamp_path);
@@ -157,60 +158,49 @@ void CentralCamManager::captureLoop() {
             throw std::runtime_error("Failed to create timestamp file: " + timestamp_path);
         }
         timestamp_file.close();
-
-        // 帧率统计
-        int frame_counter = 0;
-        auto last_time = std::chrono::steady_clock::now();
+        // 设置非阻塞模式（关键修改）
+        {
+            std::lock_guard<std::mutex> lock(capture_mutex_);
+            capture_.set(CAP_PROP_BUFFERSIZE, 1); // 减少缓冲区大小，降低阻塞概率
+        }
+        int read_fail_count = 0;
+        const int MAX_READ_FAILS = 5;
 
         while (is_running_.load()) {
-            cv::Mat frame;
+            Mat frame;
             bool read_success = false;
             {
-                std::lock_guard<std::mutex> lock(capture_mutex_);
-                if (!capture_.isOpened()) {
-                    std::cerr << "Capture device is not open. Exiting loop." << std::endl;
-                    break;
-                }
-                read_success = capture_.read(frame);
+                std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
+                if (!capture_.isOpened()) break; // 如果摄像头未打开，退出循环
+                read_success = capture_.read(frame); // 非阻塞读取
             }
-
-            if (!read_success || frame.empty()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1)); // 避免空转占用过多CPU
+            if (!read_success) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 continue;
             }
+            read_fail_count = 0; // 重置读取失败计数
 
-            // 异步处理文件保存
-            // 使用 clone() 复制图像数据，因为原始的 frame 会在下一次循环中被覆盖
-            cv::Mat frame_to_save = frame.clone();
-            std::string timestamp = TimeUtils::generateTimestampFilename();
-
-            pool_->enqueue([this, frame_to_save, img_path, timestamp, timestamp_path]() {
-                // 1. 保存时间戳
-                if (!file_manager_.saveTimestampTxt(timestamp_path, timestamp)) {
-                    std::cerr << "Failed to save timestamp: " << timestamp_path << std::endl;
-                }
-
-                // 2. 保存图像
-                std::string full_path = img_path + "/" + timestamp + ".png";
-                if (!file_manager_.saveImage(full_path, frame_to_save)) {
-                    std::cerr << "Failed to save image: " << full_path << std::endl;
-                }
-            });
-
-            frame_counter++;
-            // 每秒打印一次帧率
-            auto now = std::chrono::steady_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_time);
-            if (duration.count() >= 1) {
-                std::cout << "[Frame Rate] CentralCam capturing at: " << frame_counter << " FPS" << std::endl;
-                frame_counter = 0;
-                last_time = now;
+            // 生成带时间戳的文件名
+            std::string filename = TimeUtils::generateTimestampFilename();
+			std::string timestamp_path = img_path + "/timestamp.txt";
+            if (!file_manager_.saveTimestampTxt(timestamp_path, filename)) {
+                std::cerr << "Failed to save timestamp: " << timestamp_path << std::endl;
+            } else {
+                std::cout << "Saved timestamp: " << timestamp_path << std::endl;
+            }
+            filename += ".png"; // 添加文件扩展名
+            std::string full_path = img_path + "/";
+            full_path += filename;
+            if (!file_manager_.saveImage(full_path,frame)) {
+                std::cerr << "Failed to save image: " << full_path << std::endl;
+            } else {
+                std::cout << "Saved image: " << full_path << std::endl;
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error in central camera capture loop: " << e.what() << std::endl;
+        std::cerr << "Error in capture loop: " << e.what() << std::endl;
     } catch (...) {
-        std::cerr << "Unknown error in central camera capture loop." << std::endl;
+        std::cerr << "Unknown error in capture loop." << std::endl;
     }
     is_running_ = false; // 确保在异常情况下也能正确标记为未运行
 }

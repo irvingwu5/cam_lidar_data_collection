@@ -49,8 +49,8 @@ public:
     std::string get_side_cam_path(); //侧方摄像头
     bool createDirectory(const std::string &namefile,bool is_has_root = true);
     bool deleteFile(const std::string &filename);
-    bool saveImage(const std::string& full_path, const cv::Mat& image);
-    bool saveTimestampTxt(const std::string &txt_full_path, const std::string time);
+    bool saveImage(const std::string& full_path, const cv::Mat& image) const;
+    bool saveTimestampTxt(const std::string &txt_full_path, const std::string time) const;
     bool is_usb_inserted();
     std::string get_usb_session_folder();
     std::string get_parent_path(const std::string &path);
@@ -59,7 +59,7 @@ public:
     bool cp_item(const std::string &src, const std::string &dst);
     std::string move_folder_contents(std::string &src_folder, const std::string &dst_folder);
 
-    void savePointCloudAsKITTI(const std::vector<RadarPoint>& cloud, std::string oss);
+    void savePointCloudAsKITTI(const std::vector<RadarPoint>& cloud, std::string oss) const;
 
 private:
     static std::vector<std::string> get_subdirectories(const std::string &path);

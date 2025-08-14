@@ -6,8 +6,8 @@
 #include <opencv2/opencv.hpp>
 #include <atomic>
 #include <iostream>
-#incldue <memory>
-#incldue "ThreadPool.h" // 假设你有一个线程池类来处理多线程任务
+#include <memory>
+#include "ThreadPool.h" // 假设你有一个线程池类来处理多线程任务
 
 class CentralCamManager{
 public:

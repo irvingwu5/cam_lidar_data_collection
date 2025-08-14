@@ -15,12 +15,15 @@ TanwayLidarManager::TanwayLidarManager(int client_socket,FileManager fileManager
       algo_config_path(algo_config_path),
       client_socket(client_socket)
 {
-    thread_pool = std::make_shared<ThreadPool>(2); // 可根据需要调整线程数量
+    thread_pool = std::make_shared<ThreadPool>(1); // 可根据需要调整线程数量
 }
 
 TanwayLidarManager::~TanwayLidarManager()
 {
     stop();
+	if (thread_pool) {
+        thread_pool.reset(); // 确保线程池正确释放
+    }
 }
 
 bool TanwayLidarManager::initialize()
@@ -135,8 +138,8 @@ void TanwayLidarManager::OnPointCloud(const LidarInfo &info, const UserPointClou
             // 指数平滑（避免数值剧烈波动）
             smooth_fps = smooth_fps * 0.9f + current_fps * 0.1f;
             // 打印帧率（保留2位小数）
-            std::cout << "\r[Frame Rate] Current: " << std::fixed << std::setprecision(2) 
-                    << smooth_fps << " FPS | Last Interval: " << current_fps << " FPS" 
+            std::cout << "\r[Frame Rate] Current: " << std::fixed << std::setprecision(2)
+                    << smooth_fps << " FPS | Last Interval: " << current_fps << " FPS"
                     << std::flush;  // \r 使光标回到行首，覆盖旧输出
 
             // 重置统计变量
@@ -163,9 +166,10 @@ void TanwayLidarManager::OnPointCloud(const LidarInfo &info, const UserPointClou
         std::vector<RadarPoint> cloud;
         cloud.reserve(tanway_cloud.points.size());
         for(const auto pt : tanway_cloud.points){
-            cloud.emplace_back(pt.x, pt.y, pt.z, pt.intensity); 
+            cloud.emplace_back(pt.x, pt.y, pt.z, pt.intensity);
         }
         fileManager.savePointCloudAsKITTI(cloud, filename.str());
+        cloud.clear(); // 清空点云数据，释放内存
         std::string return_info = "{status: 1, log: [TanwayLidarManager] Save path : " + filename.str() +
                                     "}\n";
         send(client_socket, return_info.c_str(), return_info.size(), 0);

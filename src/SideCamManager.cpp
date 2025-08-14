@@ -1,7 +1,7 @@
 #include "SideCamManager.h"
 using namespace cv;
 #include <chrono>
-
+#include "TimeUtils.h"
 SideCamManager::SideCamManager(const std::string& device_path, int width, int height, FileManager& file_manager)
     : device_path_(device_path),
     width_(width),
@@ -18,6 +18,7 @@ bool SideCamManager::isDeviceAvailable(const std::string& device_path) const {
     std::ifstream dev(device_path);
     return dev.good();
 }
+
 bool SideCamManager::init() {
     // 1. 检查设备是否存在
     if (!isDeviceAvailable(device_path_)) {
@@ -81,6 +82,11 @@ bool SideCamManager::startCapture() {
             return false;
         }
     }
+	// 初始化线程池，可以根据CPU核心数设置线程数量
+    unsigned int num_threads = std::thread::hardware_concurrency();
+    if (num_threads == 0) num_threads = 4; // 默认4个线程
+    pool_ = std::make_shared<ThreadPool>(num_threads);
+    std::cout << "Image saving thread pool created with " << num_threads << " threads." << std::endl;
 
     is_running_ = true;
     capture_thread_ = std::thread(&SideCamManager::captureLoop, this);
@@ -113,6 +119,12 @@ void SideCamManager::stopCapture() {
             capture_thread_.join();
         }
     }
+	// 停止并清空线程池，确保所有排队的图像都已保存
+    if (pool_) {
+        pool_.reset(); // reset会等待所有任务完成
+        std::cout << "Image saving thread pool stopped and all tasks finished." << std::endl;
+    }
+
     is_running_ = false; // 确保状态正确
     std::cout << "Side Camera " << device_path_ << " stopped" << std::endl;
 }
@@ -123,18 +135,6 @@ bool SideCamManager::isRunning() const {
 
 bool SideCamManager::hasSideCamera() const {
     return hasSideCam;
-}
-
-std::string SideCamManager::generateTimestampFilename() {
-    // 生成格式：YYYYMMDD_HHMMSS_uuuuuu
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()) % 1000000;
-
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S")
-       << "_" << std::setw(6) << std::setfill('0') << microseconds.count();
-    return ss.str();
 }
 
 //摄像头循环采集图像并保存
@@ -155,51 +155,62 @@ void SideCamManager::captureLoop() {
             throw std::runtime_error("Failed to create timestamp file: " + timestamp_path);
         }
         timestamp_file.close();
-        // 设置非阻塞模式（关键修改）
-        {
-            std::lock_guard<std::mutex> lock(capture_mutex_);
-            capture_.set(CAP_PROP_BUFFERSIZE, 1); // 减少缓冲区大小，降低阻塞概率
-        }
-        int read_fail_count = 0;
-        const int MAX_READ_FAILS = 5;
+
+        // 帧率统计
+        int frame_counter = 0;
+        auto last_time = std::chrono::steady_clock::now();
 
         while (is_running_.load()) {
-            Mat frame;
+            cv::Mat frame;
             bool read_success = false;
             {
-                std::lock_guard<std::mutex> lock(capture_mutex_); // 确保线程安全
-                if (!capture_.isOpened()) break; // 如果摄像头未打开，退出循环
-                read_success = capture_.read(frame); // 非阻塞读取
+                std::lock_guard<std::mutex> lock(capture_mutex_);
+                if (!capture_.isOpened()) {
+                    std::cerr << "Capture device is not open. Exiting loop." << std::endl;
+                    break;
+                }
+                read_success = capture_.read(frame);
             }
-            if (!read_success) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+            if (!read_success || frame.empty()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1)); // 避免空转占用过多CPU
                 continue;
             }
-            read_fail_count = 0; // 重置读取失败计数
 
-            // 生成带时间戳的文件名
-            std::string filename = generateTimestampFilename();
-			std::string timestamp_path = img_path + "/timestamp.txt";
-            if (!file_manager_.saveTimestampTxt(timestamp_path, filename)) {
-                std::cerr << "Failed to save timestamp: " << timestamp_path << std::endl;
-            } else {
-                std::cout << "Saved timestamp: " << timestamp_path << std::endl;
-            }
-            filename += ".png"; // 添加文件扩展名
-            std::string full_path = img_path + "/";
-            full_path += filename;
-            if (!file_manager_.saveImage(full_path,frame)) {
-                std::cerr << "Failed to save image: " << full_path << std::endl;
-            } else {
-                std::cout << "Saved image: " << full_path << std::endl;
+            // 异步处理文件保存
+            // 使用 clone() 复制图像数据，因为原始的 frame 会在下一次循环中被覆盖
+            cv::Mat frame_to_save = frame.clone();
+            std::string timestamp = TimeUtils::generateTimestampFilename();
+
+            pool_->enqueue([this, frame_to_save, img_path, timestamp, timestamp_path]() {
+                // 1. 保存时间戳
+                if (!file_manager_.saveTimestampTxt(timestamp_path, timestamp)) {
+                    std::cerr << "Failed to save timestamp: " << timestamp_path << std::endl;
+                }
+
+                // 2. 保存图像
+                std::string full_path = img_path + "/" + timestamp + ".png";
+                if (!file_manager_.saveImage(full_path, frame_to_save)) {
+                    std::cerr << "Failed to save image: " << full_path << std::endl;
+                }
+            });
+
+            frame_counter++;
+            // 每秒打印一次帧率
+            auto now = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_time);
+            if (duration.count() >= 1) {
+                std::cout << "[Frame Rate] CentralCam capturing at: " << frame_counter << " FPS" << std::endl;
+                frame_counter = 0;
+                last_time = now;
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error in capture loop: " << e.what() << std::endl;
+        std::cerr << "Error in central camera capture loop: " << e.what() << std::endl;
     } catch (...) {
-        std::cerr << "Unknown error in capture loop." << std::endl;
+        std::cerr << "Unknown error in central camera capture loop." << std::endl;
     }
-    is_running_ = false; // 确保线程退出时状态正确
+    is_running_ = false; // 确保在异常情况下也能正确标记为未运行
 }
 
 bool SideCamManager::resetFlag() {

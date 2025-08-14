@@ -3,7 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
-
+#include "TimeUtils.h"
 BenewakeLidarManager::BenewakeLidarManager(int client_socket,FileManager fileManager, const std::string &ip, int port)
     : lidar_ip(ip), lidar_port(port), save_enabled(false), fileManager(fileManager),client_socket(client_socket)
 {
@@ -134,7 +134,7 @@ void BenewakeLidarManager::main_loop()
             std::cerr << "[ERROR] LIDAR data failed, code: " << err << std::endl;
             continue;
         }
-        std::string timestamp = generateTimestampFilename();
+        std::string timestamp = TimeUtils::generateTimestampFilename();
         std::string timestamp_path = dir + "/timestamp.txt";
         if (!fileManager.saveTimestampTxt(timestamp_path, timestamp))
         {

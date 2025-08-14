@@ -294,11 +294,25 @@ std::string SocketServer::process_command(const std::string &command,
         return "{central_cam_stop_result:}" + central_response +
                ", {side_cam_stop_result:}" + side_response;
     }
-	else if (cmd == "64_lidar_and_central_cam_start"){
+	else if (cmd == "all_start"){
 		std::string tanway_response = dealTanwayLidar(tanwayLidarManager,fileManager.get_64_lidar_save_path(), true);
 		std::string cencam_response = dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),true);
+	    std::string side_response = dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),true);
+		std::string benewake_response = dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), true);
 		return "{tanway_lidar_start_result:}" + tanway_response +
                ", {central_cam_start_result:}" + cencam_response;
+			   ", {side_cam_start_result:}" + side_response +
+			   ", {benewake_lidar_start_result:}" + benewake_response;
+	}
+	else if (cmd == "all_end"){
+	    std::string tanway_response = dealTanwayLidar(tanwayLidarManager,fileManager.get_64_lidar_save_path(), false);
+		std::string cencam_response = dealCentralCam(central_cam_manager, fileManager.get_central_cam_path(),false);
+		std::string side_response = dealSideCam(side_cam_manager, fileManager.get_side_cam_path(),false);
+		std::string benewake_response = dealBeneWakeLidar(benewakeLidarManager,fileManager.get_256_lidar_save_path(), false);
+		return "{tanway_lidar_stop_result:}" + tanway_response +
+               ", {central_cam_stop_result:}" + cencam_response +
+               ", {side_cam_stop_result:}" + side_response +
+               ", {benewake_lidar_stop_result:}" + benewake_response;
 	}
     // 创建保存目录
     else if (cmd == "create_path")

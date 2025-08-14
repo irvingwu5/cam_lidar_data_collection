@@ -2,7 +2,7 @@
 #include <chrono>
 #include <fstream>
 #include <iomanip>
-
+#include "TimeUtils.h"
 using namespace tanway;
 
 TanwayLidarManager::TanwayLidarManager(int client_socket,FileManager fileManager,
@@ -149,7 +149,7 @@ void TanwayLidarManager::OnPointCloud(const LidarInfo &info, const UserPointClou
         auto time = std::chrono::system_clock::to_time_t(now);
 
         //创建时间戳空文件
-        std::string timestamp = generateTimestampFilename();
+        std::string timestamp = TimeUtils::generateTimestampFilename();
         std::string timestamp_path = save_dir + "/timestamp.txt";
         //向文件中写入时间戳
         if(!fileManager.saveTimestampTxt(timestamp_path, timestamp)){

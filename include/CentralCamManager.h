@@ -6,6 +6,8 @@
 #include <opencv2/opencv.hpp>
 #include <atomic>
 #include <iostream>
+#incldue <memory>
+#incldue "ThreadPool.h" // 假设你有一个线程池类来处理多线程任务
 
 class CentralCamManager{
 public:
@@ -27,9 +29,12 @@ private:
     FileManager file_manager_;
 
     cv::VideoCapture capture_; //capture_ 是共享资源，应在销毁前确保线程不再访问它
+    //capture_thread_ (生产者)：它的唯一职责是高速、不间断地从摄像头硬件读取图像帧
     std::thread capture_thread_; //摄像头采集线程
     bool hasCentralCam; // 是否存在中央摄像头
     std::atomic<bool> is_running_;
     mutable std::mutex mutex_; //线程安全锁
     std::mutex capture_mutex_; //用于摄像头采集的锁，防止多线程访问冲突
+    //pool_ (消费者)：它包含一组后台工作线程，负责执行耗时的文件I/O操作（保存图像和时间戳），而不会阻塞主采集线程
+    std::shared_ptr<ThreadPool> pool_; // 添加线程池智能指针
 };

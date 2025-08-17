@@ -21,13 +21,12 @@ TanwayLidarManager::TanwayLidarManager(int client_socket,FileManager fileManager
 TanwayLidarManager::~TanwayLidarManager()
 {
     stop();
-	if (thread_pool) {
-        thread_pool.reset(); // 确保线程池正确释放
-    }
 }
 
 bool TanwayLidarManager::initialize()
 {
+    std::lock_guard<std::mutex> lock(device_mutex_);
+
     lidar = ILidarDevice::Create(lidar_ip.c_str(), local_ip.c_str(), 5600, 5700, this, LT_FocusB2_B3_MP);
     if (!lidar)
     {
@@ -49,6 +48,7 @@ bool TanwayLidarManager::initialize()
 
 void TanwayLidarManager::start()
 {
+    std::lock_guard<std::mutex> lock(device_mutex_);
     if (lidar_ready && !is_running_)
     {
         cur_frame = 0;
@@ -69,12 +69,15 @@ void TanwayLidarManager::start()
         std::ofstream timestamp_file(save_dir + "/timestamp.txt");
         timestamp_file.close();
 
+        // 初始化线程池
+        thread_pool_ = std::make_shared<ThreadPool>(1);
+
         lidar->Start();
         // 设置运行状态并启动线程
         is_running_ = true;
         capture_thread_ = std::thread([this]() {
             // 线程主循环：保持运行直到is_running_为false
-            while (is_running_) {
+            while (is_running_.load()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         });
@@ -84,16 +87,37 @@ void TanwayLidarManager::start()
 
 void TanwayLidarManager::stop()
 {
-    if (lidar_ready && is_running_)
+    if (!is_running_.exchange(false)) return;
+    // 停止设备
     {
-        is_running_ = false; // 先停止运行状态
-        // 等待线程结束
+        std::lock_guard<std::mutex> lock(device_mutex_);
+        if (lidar) lidar->Stop();
+    }
+    // 等待采集线程结束
+    if (capture_thread_.joinable()) {
+        auto start = std::chrono::steady_clock::now();
+        const auto timeout = std::chrono::seconds(5);
+
+        while (capture_thread_.joinable()) {
+            auto now = std::chrono::steady_clock::now();
+            if (now - start >= timeout) {
+                std::cerr << "[Tanway] Thread join timeout" << std::endl;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
         if (capture_thread_.joinable()) {
             capture_thread_.join();
         }
-        lidar->Stop();
-        std::cout << "[TanwayLidarManager] Lidar stopped." << std::endl;
     }
+
+    // 释放线程池
+    if (thread_pool_) {
+        thread_pool_.reset();
+        std::cout << "[Tanway] Thread pool stopped" << std::endl;
+    }
+
+    std::cout << "[Tanway] Capture stopped" << std::endl;
 }
 
 bool TanwayLidarManager::hasLidar() const
@@ -101,83 +125,58 @@ bool TanwayLidarManager::hasLidar() const
     return lidar_ready;
 }
 
-std::string TanwayLidarManager::generateTimestampFilename()
-{
-    // 生成格式：YYYYMMDD_HHMMSS_uuuuuu
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()) % 1000000;
-
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y%m%d_%H%M%S")
-       << "_" << std::setw(6) << std::setfill('0') << microseconds.count();
-    return ss.str();
+bool TanwayLidarManager::isRunning() const {
+    return is_running_.load();
 }
 
-void TanwayLidarManager::OnPointCloud(const LidarInfo &info, const UserPointCloud &tanway_cloud)
+void TanwayLidarManager::OnPointCloud(const LidarInfo& info, const UserPointCloud& cloud) {
+    if (is_running_.load()) {
+        handlePointCloud(cloud);
+    }
+}
+
+void TanwayLidarManager::handlePointCloud(const UserPointCloud& cloud)
 {
     // 只处理运行状态下的数据
-    if (!is_running_) return;
+    if (!is_running_.load()) return;
 
-    auto task = [tanway_cloud, this]() {
+    static int frame_counter = 0;
+    static auto last_fps_time = std::chrono::steady_clock::now();
 
-        static auto last_time = std::chrono::steady_clock::now();  // 上次统计时间（静态变量保持状态）
-        static int frame_count = 0;                                // 当前统计间隔内的帧数
-        static float smooth_fps = 0.0f;                            // 平滑后的帧率
-        constexpr float fps_update_interval = 1.0f;                // 帧率更新间隔（秒）
+    // 生成时间戳
+    std::string timestamp = TimeUtils::generateTimestampFilename();
+    std::string timestamp_path = save_dir + "/timestamp.txt";
+    if (!fileManager_.saveTimestampTxt(timestamp_path, timestamp)) {
+        std::cerr << "[Tanway] Failed to save timestamp" << std::endl;
+    }
 
-        // ---------------------- 帧率计算逻辑 ----------------------
-        auto current_time = std::chrono::steady_clock::now();
-        auto delta_time = std::chrono::duration<float>(current_time - last_time).count();
-        frame_count++;  // 每处理一帧，计数加1
+    // 保存点云数据
+    std::string bin_path = save_dir + "/" + timestamp + ".bin";
+    auto cloud_copy = cloud;  // 复制数据避免生命周期问题
 
-        // 当时间间隔超过设定值时，计算并打印帧率
-        if (delta_time >= fps_update_interval) {
-            // 计算当前帧率（帧数 / 时间差）
-            float current_fps = frame_count / delta_time;
-            // 指数平滑（避免数值剧烈波动）
-            smooth_fps = smooth_fps * 0.9f + current_fps * 0.1f;
-            // 打印帧率（保留2位小数）
-            std::cout << "\r[Frame Rate] Current: " << std::fixed << std::setprecision(2)
-                    << smooth_fps << " FPS | Last Interval: " << current_fps << " FPS"
-                    << std::flush;  // \r 使光标回到行首，覆盖旧输出
-
-            // 重置统计变量
-            frame_count = 0;
-            last_time = current_time;
+    thread_pool_->enqueue([this, cloud_copy, bin_path]() {
+        std::vector<RadarPoint> radar_points;
+        radar_points.reserve(cloud_copy.points.size());
+        for (const auto& pt : cloud_copy.points) {
+            radar_points.emplace_back(pt.x, pt.y, pt.z, pt.intensity);
         }
+        fileManager_.savePointCloudAsKITTI(radar_points, bin_path);
 
-        std::ostringstream filename;
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
+        // 发送状态信息
+        std::string response = "{status: 1, log: [Tanway] Saved: " + bin_path + "}\n";
+        std::lock_guard<std::mutex> lock(send_mutex_);
+        send(client_socket_, response.c_str(), response.size(), 0);
+    });
 
-        //创建时间戳空文件
-        std::string timestamp = TimeUtils::generateTimestampFilename();
-        std::string timestamp_path = save_dir + "/timestamp.txt";
-        //向文件中写入时间戳
-        if(!fileManager.saveTimestampTxt(timestamp_path, timestamp)){
-            std::cerr << "[TanwayLidarManager] Failed to save timestamp." << std::endl;
-        }else{
-            std::cout << "[TanwayLidarManager] Saved timestamp: " << timestamp_path << std::endl;
-        }
-
-        filename << save_dir << "/" << timestamp << ".bin";
-
-        std::vector<RadarPoint> cloud;
-        cloud.reserve(tanway_cloud.points.size());
-        for(const auto pt : tanway_cloud.points){
-            cloud.emplace_back(pt.x, pt.y, pt.z, pt.intensity);
-        }
-        fileManager.savePointCloudAsKITTI(cloud, filename.str());
-        cloud.clear(); // 清空点云数据，释放内存
-        std::string return_info = "{status: 1, log: [TanwayLidarManager] Save path : " + filename.str() +
-                                    "}\n";
-		std::lock_guard<std::mutex> lock(send_mutex);  // 互斥锁确保线程安全
-        send(client_socket, return_info.c_str(), return_info.size(), 0);
-        cur_frame++;
-    };
-
-    thread_pool->enqueue(task);
+    // 计算帧率
+    frame_counter++;
+    auto now = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_fps_time);
+    if (duration.count() >= 1) {
+        std::cout << "[Tanway] FPS: " << frame_counter << std::endl;
+        frame_counter = 0;
+        last_fps_time = now;
+    }
 }
 
 void TanwayLidarManager::OnException(const LidarInfo &info, const Exception &e)

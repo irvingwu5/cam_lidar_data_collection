@@ -35,22 +35,22 @@ int main(int argc, char **argv)
 
 	// 客户端交互
 
-	//SocketClient client("127.0.0.1", 8080);
+	//SocketClient client("10.19.241.116", 8082);
 	//if (client.connect_to_server())
 	//{
-		//client.send_message("central_cam_start");
+        //client.send_message("create_path:2025817");
 		//client.receive_response();
-		// client.send_message("create_path:m6");
-		// client.receive_response();
   //
-		// client.send_message("select_path:m6");
-		// client.receive_response();
+		//client.send_message("select_path:2025817");
+		//client.receive_response();
+        //client.send_message("all_lidar_start");
+		//client.receive_response();
   //
 		//
 		// client.send_message("together_start");
 		// client.receive_response();
   //
-		// std::this_thread::sleep_for(std::chrono::seconds(16));
+		//std::this_thread::sleep_for(std::chrono::seconds(16));
 		// client.send_message("together_end");
 		// client.receive_response();
   //

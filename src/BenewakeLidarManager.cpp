@@ -15,6 +15,8 @@ BenewakeLidarManager::~BenewakeLidarManager() {
 }
 bool BenewakeLidarManager::initialize()
 {
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+    // 检查IP地址和端口号是否有效
     lidar = std::make_shared<benewake::BenewakeLidar>(lidar_ip, lidar_port);
     std::string version, version_fpga, sn;
     int total_num, line_num, channel_num;
@@ -43,8 +45,18 @@ bool BenewakeLidarManager::hasLidar() const
     return lidar_present;
 }
 
+bool BenewakeLidarManager::isRunning() const {
+    return is_running_.load();
+}
+
 void BenewakeLidarManager::start()
 {
+    std::lock_guard<std::mutex> lock(capture_mutex_);
+
+    if (is_running_.load()) {
+        std::cout << "[Benewake] Already running" << std::endl;
+    }
+
     if (!lidar_present)
     {
         std::cerr << "[ERROR] No LIDAR detected. Aborting start().\n";
@@ -67,107 +79,109 @@ void BenewakeLidarManager::start()
 
     // 启动采集线程（不再detach，保存线程句柄）
     is_running_ = true;
-    main_thread_ = std::thread(&BenewakeLidarManager::main_loop, this);
+    capture_thread_ = std::thread(&BenewakeLidarManager::captureLoop, this);
 }
 
 void BenewakeLidarManager::stop()
 {
-    if (!lidar_present) return;
-
-    // 原子更新状态，终止循环
-    is_running_ = false;
+    if (!is_running_.exchange(false)) return; // 如果已经在停止状态，直接返回
     // 停止设备
-    if (lidar)
-        lidar->stop();
-    // 等待采集线程结束（关键：确保线程同步）
-    if (main_thread_.joinable())
     {
-        main_thread_.join();
-        std::cout << "[BenewakeLidarManager] Lidar thread stopped.\n";
+        std::lock_guard<std::mutex> lock(capture_mutex_);
+        if (lidar) lidar->stop();
     }
+
+    // 等待采集线程结束
+    if (capture_thread_.joinable()) {
+        auto start = std::chrono::steady_clock::now();
+        const auto timeout = std::chrono::seconds(5);
+
+        while (capture_thread_.joinable()) {
+            auto now = std::chrono::steady_clock::now();
+            if (now - start >= timeout) {
+                std::cerr << "[Benewake] Thread join timeout" << std::endl;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        if (capture_thread_.joinable()) {
+            capture_thread_.join();
+        }
+    }
+
     // 释放线程池
-    pool.reset();
+    if (pool) {
+        pool.reset();
+        std::cout << "[Benewake] Thread pool stopped" << std::endl;
+    }
+
+    std::cout << "[Benewake] Capture stopped" << std::endl;
 }
-void BenewakeLidarManager::main_loop()
-{
-    int cur_frame = 0;
-    benewake::BwPointCloud::Ptr pointCloud;
-    benewake::SYS_INFO sys_info;
-    int nFrame = 0;
-    Config::running = true;
-    dir = fileManager.get_256_lidar_save_path();
-    if (dir.length() <= 0)
-    {
-        std::cout << "select save_path" << std::endl;
-        return;
+
+void BenewakeLidarManager::captureLoop() {
+    try {
+        int frame_counter = 0;
+        auto last_fps_time = std::chrono::steady_clock::now();
+        benewake::BwPointCloud::Ptr pointCloud;
+        benewake::SYS_INFO sys_info;
+        int nFrame = 0;
+
+        while (is_running_.load()) {
+            bool data_ok = false;
+            {
+                std::lock_guard<std::mutex> lock(capture_mutex_);
+                if (lidar) {
+                    data_ok = lidar->getData(pointCloud, nFrame, sys_info);
+                }
+            }
+
+            if (!data_ok) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                continue;
+            }
+
+            // 生成时间戳
+            std::string timestamp = TimeUtils::generateTimestampFilename();
+            std::string timestamp_path = save_dir_ + "/timestamp.txt";
+            if (!fileManager.saveTimestampTxt(timestamp_path, timestamp)) {
+                std::cerr << "[Benewake] Failed to save timestamp" << std::endl;
+            }
+
+            // 保存点云数据
+            if (!pointCloud->points.empty()) {
+                std::string bin_path = save_dir_ + "/" + timestamp + ".bin";
+                auto cloud_copy = *pointCloud;  // 复制数据避免生命周期问题
+
+                pool->enqueue([this, cloud_copy, bin_path]() {
+                    std::vector<RadarPoint> radar_points;
+                    radar_points.reserve(cloud_copy.points.size());
+                    for (const auto& pt : cloud_copy.points) {
+                        radar_points.emplace_back(pt.x, pt.y, pt.z, pt.intensity);
+                    }
+                    fileManager.savePointCloudAsKITTI(radar_points, bin_path);
+
+                    // 发送状态信息
+                    std::string response = "{status: 1, log: [Benewake] Saved: " + bin_path + "}\n";
+                    std::lock_guard<std::mutex> lock(send_mutex_);
+                    send(client_socket, response.c_str(), response.size(), 0);
+                });
+
+                frame_counter++;
+            }
+
+            // 计算帧率
+            auto now = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_fps_time);
+            if (duration.count() >= 1) {
+                std::cout << "[Benewake] FPS: " << frame_counter << std::endl;
+                frame_counter = 0;
+                last_fps_time = now;
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[Benewake] Capture loop error: " << e.what() << std::endl;
     }
-
-    int number = fileManager.getPathCount(dir);
-    if (number < 10)
-        dir = dir + "/0" + std::to_string(number);
-    else
-        dir = dir + "/" + std::to_string(number);
-    fileManager.createDirectory(dir,false);
-    std::ofstream timestamp_file(dir + "/timestamp.txt");
-    timestamp_file.close();
-
-    // 帧率统计变量
-    int frame_counter = 0;
-    auto last_time = std::chrono::steady_clock::now();
-
-    while (is_running_)
-    {
-        bool ok = lidar->getData(pointCloud, nFrame, sys_info);
-        if (!ok)
-        {
-            int err = benewake::BW_GET_SYSTEM_STATUS_CODE(sys_info);
-            std::cerr << "[ERROR] LIDAR data failed, code: " << err << std::endl;
-            continue;
-        }
-        std::string timestamp = TimeUtils::generateTimestampFilename();
-        std::string timestamp_path = dir + "/timestamp.txt";
-        if (!fileManager.saveTimestampTxt(timestamp_path, timestamp))
-        {
-            std::cerr << "[ERROR] Failed to save timestamp: " << timestamp_path << std::endl;
-        }
-        else
-        {
-            std::cout << "[INFO] Saved timestamp: " << timestamp_path << std::endl;
-        }
-        std::ostringstream oss;
-
-        if (pointCloud->points.size() > 0)
-        {
-            oss << dir << "/" << timestamp << ".bin";
-            std::string path = oss.str();
-            pool->enqueue([=]
-                          {
-                               std::vector<RadarPoint> cloud;
-                                cloud.reserve(pointCloud->points.size());
-                                for(const auto pt : pointCloud->points){
-                                    cloud.emplace_back(pt.x, pt.y, pt.z, pt.intensity);
-                                }
-                              fileManager.savePointCloudAsKITTI(cloud, path);
-                              //删除cloud释放内存
-                              cloud.clear();
-                              std::string return_info = "{status: 1, log: [BenewakeLidar] Save path: " + path +
-                                                            "}\n";
-                              std::lock_guard<std::mutex> lock(send_mutex);
-                               send(client_socket, return_info.c_str(), return_info.size(), 0);
-                             });
-            cur_frame++;
-            frame_counter++;
-        }
-        // 每秒打印一次帧率
-        auto now = std::chrono::steady_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_time);
-        if (duration.count() >= 1)
-        {
-            std::cout << "[FPS] Saving point clouds at: " << frame_counter << " frames/sec" << std::endl;
-            frame_counter = 0;
-            last_time = now;
-        }
-    }
-
-    Config::running = false;
+    is_running_ = false;
 }
